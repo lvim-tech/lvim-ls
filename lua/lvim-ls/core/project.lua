@@ -374,4 +374,67 @@ function M.invalidate_all(root_dir)
     end
 end
 
+-- ── Public: introspection / clearing ──────────────────────────────────────────
+
+--- List the project overrides present under `root_dir`/.lvim-ls: which servers, filetypes
+--- and EFM tools have an override file, and whether a config file exists. Lets the UI show
+--- and reset per-project overrides without re-reading the files itself.
+---@param root_dir string
+---@return { has_config: boolean, servers: string[], filetypes: string[], efm_tools: string[] }
+function M.list_overrides(root_dir)
+    local function names_in(subdir)
+        local out = {}
+        local dir = dir_path(root_dir) .. "/" .. subdir
+        if vim.fn.isdirectory(dir) == 1 then
+            for name, t in vim.fs.dir(dir) do
+                local base = t == "file" and name:match("^(.+)%.lua$")
+                if base then
+                    out[#out + 1] = base
+                end
+            end
+            table.sort(out)
+        end
+        return out
+    end
+    return {
+        has_config = vim.fn.filereadable(config_path(root_dir)) == 1
+            or vim.fn.filereadable(root_dir .. "/" .. LEGACY_FILE) == 1,
+        servers = names_in(SERVERS_DIR),
+        filetypes = names_in(FT_DIR),
+        efm_tools = names_in(EFM_DIR),
+    }
+end
+
+--- Delete the project config file(s) and invalidate the cache.
+---@param root_dir string
+function M.clear_config(root_dir)
+    pcall(vim.fn.delete, config_path(root_dir))
+    pcall(vim.fn.delete, root_dir .. "/" .. LEGACY_FILE)
+    M.invalidate(root_dir)
+end
+
+--- Delete the per-server override file and invalidate its cache.
+---@param root_dir    string
+---@param server_name string
+function M.clear_server(root_dir, server_name)
+    pcall(vim.fn.delete, server_path(root_dir, server_name))
+    M.invalidate_server(root_dir, server_name)
+end
+
+--- Delete the per-filetype override file and invalidate its cache.
+---@param root_dir string
+---@param ft       string
+function M.clear_ft(root_dir, ft)
+    pcall(vim.fn.delete, ft_path(root_dir, ft))
+    M.invalidate_ft(root_dir, ft)
+end
+
+--- Delete the per-EFM-tool override file and invalidate its cache.
+---@param root_dir  string
+---@param tool_name string
+function M.clear_efm_tool(root_dir, tool_name)
+    pcall(vim.fn.delete, efm_tool_path(root_dir, tool_name))
+    M.invalidate_efm_tool(root_dir, tool_name)
+end
+
 return M

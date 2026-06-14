@@ -90,9 +90,13 @@ Lifecycle: >lua
   manager.ensure_lsp_for_buffer(server, bufnr)    -- attach/start, client id|nil
   manager.lsp_enable(server)                       -- ensure for current buffer
   manager.start_language_server(server, force)     -- start via a compatible buf
+  manager.restart_server(server)                   -- stop all, re-attach served bufs
   manager.safe_detach_client(bufnr, client_id)
   manager.stop_servers_for_old_project()           -- DirChanged cleanup
 <
+A server's binary is resolved at start time as PATH → lvim-pkg's managed bin dir →
+the legacy Mason bin dir, so tools installed by lvim-pkg are found without relying
+on PATH.
 Enable / disable: >lua
   manager.disable_lsp_server_globally(server)
   manager.disable_lsp_server_for_buffer(server, bufnr)

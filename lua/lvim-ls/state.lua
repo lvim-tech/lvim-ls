@@ -234,6 +234,57 @@ end
 
 M.bin_aliases = build_bin_aliases(M.file_types)
 
+--- Validate the shape of `file_types` and collect human-readable problems. Catches the
+--- common config mistakes (wrong types) so they surface as a warning instead of silently
+--- no-op'ing when a server is looked up by filetype.
+---@param file_types any
+---@return string[]
+local function validate_file_types(file_types)
+    local problems = {}
+    if type(file_types) ~= "table" then
+        return { "file_types must be a table" }
+    end
+    local function check_tool_list(name, key, list)
+        if list == nil then
+            return
+        end
+        if not vim.islist(list) then
+            problems[#problems + 1] = ("%s.%s must be a list"):format(name, key)
+            return
+        end
+        for _, tool in ipairs(list) do
+            local t = type(tool)
+            if t ~= "string" and not (t == "table" and type(tool[1]) == "string") then
+                problems[#problems + 1] = ("%s.%s entries must be a string or { name, bin = … }"):format(name, key)
+                break
+            end
+        end
+    end
+    for name, entry in pairs(file_types) do
+        name = tostring(name)
+        if type(entry) ~= "table" then
+            problems[#problems + 1] = ("%s: entry must be a table"):format(name)
+        else
+            local fts = entry.filetypes
+            if fts ~= nil and not vim.islist(fts) then
+                problems[#problems + 1] = ("%s.filetypes must be a string list"):format(name)
+            elseif vim.islist(fts) then
+                for _, ft in ipairs(fts) do
+                    if type(ft) ~= "string" then
+                        problems[#problems + 1] = ("%s.filetypes must contain only strings"):format(name)
+                        break
+                    end
+                end
+            end
+            check_tool_list(name, "lsp", entry.lsp)
+            check_tool_list(name, "formatters", entry.formatters)
+            check_tool_list(name, "linters", entry.linters)
+            check_tool_list(name, "debuggers", entry.debuggers)
+        end
+    end
+    return problems
+end
+
 --- Merge user config over defaults and refresh convenience aliases.
 ---@param user_config LvimLspConfig
 function M.configure(user_config)
@@ -242,6 +293,15 @@ function M.configure(user_config)
     M.file_types = M.config.file_types
     M.efm_filetypes = M.config.efm.filetypes
     M.bin_aliases = build_bin_aliases(M.file_types)
+    -- Surface malformed file_types entries once, at configure time (lazy require avoids a
+    -- load-time cycle with the notify util).
+    local problems = validate_file_types(M.file_types)
+    if #problems > 0 then
+        require("lvim-ls.utils.notify")(
+            ("lvim-ls config: %d file_types issue(s):\n  %s"):format(#problems, table.concat(problems, "\n  ")),
+            vim.log.levels.WARN
+        )
+    end
 end
 
 return M

@@ -246,6 +246,32 @@ local function is_missing(dep)
     return vim.fn.executable(mason_bin_dir .. bin) ~= 1
 end
 
+--- Resolve a tool's executable to a runnable path: PATH first, then lvim-pkg's managed bin
+--- dir (where lvim-pkg links the tools it installs), then the legacy Mason bin dir. Returns
+--- the resolved path, or nil when the binary is nowhere to be found.
+---@param exe string
+---@return string|nil
+local function resolve_bin(exe)
+    if not exe or exe == "" then
+        return nil
+    end
+    if vim.fn.executable(exe) == 1 then
+        return exe
+    end
+    local ok, pkg = pcall(require, "lvim-pkg")
+    if ok and type(pkg.bin_dir) == "function" then
+        local p = pkg.bin_dir() .. "/" .. exe
+        if vim.fn.executable(p) == 1 then
+            return p
+        end
+    end
+    local legacy = mason_bin_dir .. exe
+    if vim.fn.executable(legacy) == 1 then
+        return legacy
+    end
+    return nil
+end
+
 --- Tools `server_name` needs that are not installed in Mason's bin directory.
 --- Pure data (no UI, no install): used by ensure_lsp_for_buffer to decide whether
 --- to start the server, and by lvim-ls.data to feed the unified install prompt.
@@ -436,15 +462,15 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
         config.settings = vim.tbl_deep_extend("force", config.settings or {}, proj_data.settings)
     end
 
-    -- Guard: resolve the binary before spawning.
-    -- If the cmd is not in PATH, try Mason's bin directory directly.
+    -- Guard: resolve the binary before spawning. Try PATH, then lvim-pkg's managed bin
+    -- dir, then the legacy Mason bin dir (see resolve_bin).
     local exe = type(config.cmd) == "table" and config.cmd[1]
     if exe and vim.fn.executable(exe) ~= 1 then
-        local mason_bin = vim.fn.stdpath("data") .. "/mason/bin/" .. exe
-        if vim.fn.executable(mason_bin) == 1 then
-            config.cmd = vim.list_extend({ mason_bin }, { unpack(config.cmd, 2) })
+        local resolved = resolve_bin(exe)
+        if resolved then
+            config.cmd = vim.list_extend({ resolved }, { unpack(config.cmd, 2) })
         else
-            local msg = string.format("%s: '%s' not found in PATH or Mason bin", server_name, exe)
+            local msg = string.format("%s: '%s' not found in PATH, lvim-pkg or Mason bin", server_name, exe)
             notify(msg, vim.log.levels.WARN)
             debug(msg, vim.log.levels.WARN)
             return nil
@@ -652,6 +678,40 @@ end
 ---@return integer|nil
 M.lsp_enable = function(server_name)
     return M.ensure_lsp_for_buffer(server_name, vim.api.nvim_get_current_buf())
+end
+
+--- Restarts `server_name`: stops every running instance and re-attaches it to the buffers
+--- it was serving (after a short delay so the old clients fully exit first). Falls back to a
+--- fresh start via a compatible buffer when the server had none attached.
+---@param server_name string
+---@return boolean
+M.restart_server = function(server_name)
+    local bufs = {}
+    for _, client in ipairs(vim.lsp.get_clients()) do
+        if client.name == server_name then
+            for bufnr in pairs(client.attached_buffers or {}) do
+                if vim.api.nvim_buf_is_valid(bufnr) then
+                    bufs[bufnr] = true
+                end
+            end
+            pcall(client.stop, client)
+        end
+    end
+    -- Drop the cached per-root client ids so ensure_* starts fresh ones.
+    state.clients_by_root[server_name] = nil
+    vim.defer_fn(function()
+        local any = false
+        for bufnr in pairs(bufs) do
+            if vim.api.nvim_buf_is_valid(bufnr) then
+                M.ensure_lsp_for_buffer(server_name, bufnr)
+                any = true
+            end
+        end
+        if not any then
+            M.start_language_server(server_name, false)
+        end
+    end, 200)
+    return true
 end
 
 --- Stops all LSP clients whose root_dir is outside the current working directory.
