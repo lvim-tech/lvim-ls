@@ -1,0 +1,143 @@
+*lvim-ls.txt*            The engine of the LVIM language-server stack (no UI)
+
+==============================================================================
+CONTENTS                                                          *lvim-ls*
+
+  1. Introduction ........................... |lvim-ls-intro|
+  2. Architecture ........................... |lvim-ls-architecture|
+  3. Installation ........................... |lvim-ls-installation|
+  4. Usage .................................. |lvim-ls-usage|
+  5. Manager API ............................ |lvim-ls-manager|
+  6. Installer integration .................. |lvim-ls-data|
+  7. Bootstrap .............................. |lvim-ls-bootstrap|
+  8. Ecosystem .............................. |lvim-ls-ecosystem|
+
+==============================================================================
+1. INTRODUCTION                                              *lvim-ls-intro*
+
+lvim-ls is the ENGINE of the LVIM language-server stack: all LSP lifecycle,
+project resolution, feature/dependency data and progress tracking — with NO
+UI. The visual layer (panels, forms, highlights, notifications) lives in
+lvim-lsp, which drives this engine.
+
+The split keeps the heavy, stateful logic isolated and composable: lvim-ls
+answers "what servers/tools does this filetype need, what is running, what is
+missing", while lvim-lsp decides how to show it and lvim-pkg / lvim-installer
+decide how to install it.
+
+No global namespace is touched: every module reads and writes through
+|lvim-ls.state|, so the engine stays side-effect free and testable.
+
+==============================================================================
+2. ARCHITECTURE                                       *lvim-ls-architecture*
+
+  state.lua          shared module state — replaces all _G.* globals
+  data.lua           missing-tool reporting for the unified installer prompt
+  config/            data-only defaults (lsp / features / progress / message)
+  core/
+    bootstrap.lua    one-time engine setup (autocmds + initial sweep)
+    manager.lua      LSP client lifecycle (start / attach / detach / enable)
+    project.lua      project-root resolution and per-root server sets
+    schema.lua       server/tool requirement schema
+    features.lua     per-filetype feature resolution
+    progress.lua     $/progress aggregation (data only)
+    dap.lua          debug-adapter requirements
+    globals.lua      runtime globals/env wiring
+  utils/             notify / debug / levels helpers
+
+==============================================================================
+3. INSTALLATION                                       *lvim-ls-installation*
+
+lvim-ls is the engine behind lvim-lsp and is normally installed as its
+dependency — you do not configure it directly.
+
+LVIM IDE (pulled in as a dependency of lvim-lsp): >lua
+  modules["lvim-tech/lvim-lsp"] = {
+      dependencies = { "lvim-tech/lvim-ls", "lvim-tech/lvim-utils" },
+      opts = { ... },  -- engine + UI options, configured through lvim-lsp
+  }
+<
+Standalone (lazy.nvim): >lua
+  {
+      "lvim-tech/lvim-ls",
+      dependencies = { "lvim-tech/lvim-pkg" },
+  }
+<
+==============================================================================
+4. USAGE                                                     *lvim-ls-usage*
+
+lvim-ls is a LIBRARY, not a standalone plugin — there is no `setup()` here. It
+is required and configured through lvim-lsp, whose `setup(opts)` merges the
+engine (data) options into |lvim-ls.state|.config while the UI options stay in
+lvim-lsp. Consumers require the engine modules directly: >lua
+  local manager = require("lvim-ls.core.manager")
+  local servers = manager.get_compatible_lsp_for_ft("go")
+  local missing = manager.missing_tools_for_server("gopls")
+<
+==============================================================================
+5. MANAGER API                                             *lvim-ls-manager*
+
+  local manager = require("lvim-ls.core.manager")
+
+Compatibility / state queries: >lua
+  manager.is_lsp_compatible_with_ft(server, ft)   -- boolean
+  manager.get_compatible_lsp_for_ft(ft)           -- string[] (incl. "efm")
+  manager.is_server_disabled_globally(server)     -- boolean
+  manager.is_server_disabled_for_buffer(server, bufnr)
+  manager.missing_tools_for_server(server)        -- string[] Mason names
+<
+Lifecycle: >lua
+  manager.ensure_lsp_for_buffer(server, bufnr)    -- attach/start, client id|nil
+  manager.lsp_enable(server)                       -- ensure for current buffer
+  manager.start_language_server(server, force)     -- start via a compatible buf
+  manager.safe_detach_client(bufnr, client_id)
+  manager.stop_servers_for_old_project()           -- DirChanged cleanup
+<
+Enable / disable: >lua
+  manager.disable_lsp_server_globally(server)
+  manager.disable_lsp_server_for_buffer(server, bufnr)
+  manager.enable_lsp_server_globally(server)
+  manager.enable_lsp_server_for_buffer(server, bufnr)
+<
+EFM + installation: >lua
+  manager.setup_efm(filetypes, tools_config)       -- merge EFM tools, restart
+  manager.set_installation_status(boolean)         -- pause/resume auto-start
+<
+EFM (errorformat) configs are built INTERNALLY from each server module's `efm`
+table and aggregated into a single `efm-langserver` client — there is no
+external efm.lua. A tool the server needs but Mason has not installed suppresses
+the server start; lvim-installer offers the missing tools via the unified prompt.
+
+==============================================================================
+6. INSTALLER INTEGRATION                                      *lvim-ls-data*
+
+  local data = require("lvim-ls.data")
+
+lvim-ls.data exposes the missing-tool surface consumed by lvim-pkg's provider
+registry, so lvim-installer can offer the missing Mason tools for a filetype
+alongside treesitter parsers — without lvim-ls knowing anything about
+installation or UI: >lua
+  data.missing_for_ft("go")  -- server_name -> { missing dependency names }
+  data.items_for_ft("go")    -- flat LvimPkgItem list for the installer prompt
+<
+==============================================================================
+7. BOOTSTRAP                                             *lvim-ls-bootstrap*
+
+  require("lvim-ls.core.bootstrap").init()
+
+`init()` registers the engine autocmds (FileType / BufEnter / BufReadPost
+attach, DirChanged cleanup), performs an initial sweep of already-open buffers,
+registers the "lsp" requirement provider with lvim-pkg (soft dependency) and
+subscribes to its installer events. Activation is deferred by
+`config.startup_delay_ms`.
+
+==============================================================================
+8. ECOSYSTEM                                             *lvim-ls-ecosystem*
+
+  lvim-lsp         the UI for this engine
+  lvim-pkg         package / tool manager
+  lvim-installer   install UI / unified prompt
+  lvim-ts          treesitter runtime
+  lvim-utils       shared UI / notify helpers
+
+vim:tw=78:ts=8:noet:ft=help:norl:
