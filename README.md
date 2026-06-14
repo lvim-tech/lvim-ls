@@ -43,14 +43,14 @@ Pulled in automatically as a dependency of `lvim-lsp`:
 
 ```lua
 modules["lvim-tech/lvim-lsp"] = {
-  dependencies = { "lvim-tech/lvim-ls", "lvim-tech/lvim-utils" },
-  opts = { ... },   -- engine + UI options, configured through lvim-lsp
+    dependencies = { "lvim-tech/lvim-ls", "lvim-tech/lvim-utils" },
+    opts = { ... }, -- engine + UI options, configured through lvim-lsp
 }
 ```
 
 ### Standalone (lazy.nvim)
 
-```lua
+```text
 {
   "lvim-tech/lvim-ls",
   dependencies = { "lvim-tech/lvim-pkg" },
@@ -64,7 +64,7 @@ It is required and configured through `lvim-lsp`:
 
 ```lua
 require("lvim-lsp").setup({
-  -- engine (data) options are merged into lvim-ls.config; UI options stay in lvim-lsp
+    -- engine (data) options are merged into lvim-ls.config; UI options stay in lvim-lsp
 })
 ```
 
@@ -74,6 +74,12 @@ Consumers require the engine modules directly, e.g.:
 local manager = require("lvim-ls.core.manager")
 local servers = manager.get_compatible_lsp_for_ft("go")
 local missing = manager.missing_tools_for_server("gopls")
+manager.restart_server("gopls") -- stop all instances and re-attach served buffers
+
+-- Per-project overrides under .lvim-ls/ (show / reset, used by the UI):
+local project = require("lvim-ls.core.project")
+local overrides = project.list_overrides(vim.uv.cwd()) -- servers / filetypes / efm_tools
+project.clear_server(vim.uv.cwd(), "gopls")
 ```
 
 ## Installer integration
@@ -85,8 +91,8 @@ without `lvim-ls` knowing anything about installation or UI:
 
 ```lua
 local data = require("lvim-ls.data")
-data.missing_for_ft("go")   -- server_name -> { missing dependency names }
-data.items_for_ft("go")     -- flat LvimPkgItem list for the installer prompt
+data.missing_for_ft("go") -- server_name -> { missing dependency names }
+data.items_for_ft("go") -- flat LvimPkgItem list for the installer prompt
 ```
 
 ## Part of the LVIM ecosystem

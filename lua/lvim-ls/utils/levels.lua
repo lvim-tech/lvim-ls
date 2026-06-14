@@ -4,7 +4,7 @@
 
 local M = {}
 
--- Level constants matching your debug levels
+-- Level constants (TRACE .. OFF), ascending by severity.
 M.TRACE = 0
 M.DEBUG = 1
 M.INFO = 2
@@ -100,48 +100,6 @@ function M.get_level_name(level_num)
 
     init_level_names()
     return LEVEL_NAMES[level_num] or tostring(level_num)
-end
-
---- Get all available level names
----@return string[]
-function M.get_all_level_names()
-    local names = {}
-    for name in pairs(LEVELS) do
-        table.insert(names, name)
-    end
-    table.sort(names)
-    return names
-end
-
---- Get all available level numbers
----@return integer[]
-function M.get_all_level_numbers()
-    local numbers = {}
-    for _, num in pairs(LEVELS) do
-        table.insert(numbers, num)
-    end
-    table.sort(numbers)
-    return numbers
-end
-
---- Check if a level string is valid
----@param level_str string Level string to check
----@return boolean
-function M.is_valid_level_name(level_str)
-    if type(level_str) ~= "string" then
-        return false
-    end
-    local normalized = normalize_level_string(level_str)
-    return LEVELS[normalized] ~= nil
-end
-
---- Get minimum level for logging based on configuration
----@param config_level string|integer|nil Configured level
----@param default_level string|integer|nil Default level
----@return integer
-function M.get_min_level(config_level, default_level)
-    default_level = default_level or M.INFO
-    return M.to_level_number(config_level or default_level)
 end
 
 return M
