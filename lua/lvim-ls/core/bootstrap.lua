@@ -77,22 +77,23 @@ local function apply_ft_settings(bufnr)
     end
 end
 
---- Detach and stop all LSP clients whose binary lives in `pkg`'s Mason directory.
---- Called on both uninstall:start (stop before files vanish) and uninstall:success
---- (cleanup any stragglers).  Detaching from buffers first prevents in-flight
---- LSP responses from trying to apply edits to non-modifiable buffers (E21).
----@param pkg table  Mason package object (pkg.name = Mason package name)
-local function on_mason_uninstall(pkg)
-    local pkg_name = pkg and pkg.name
-    if not pkg_name then
+--- Detach and stop every LSP client backed by the just-removed tool `name`.
+--- Fired via lvim-pkg's "removing" event BEFORE the binary is deleted, so in-flight LSP
+--- responses don't try to apply edits to non-modifiable buffers (E21) and the server
+--- doesn't crash on missing files; the "removed" event repeats it for any straggler.
+---@param name string  lvim-pkg / Mason package name
+local function on_tool_removed(name)
+    if not name or name == "" then
         return
     end
-
-    local pkg_dir = vim.fn.stdpath("data") .. "/mason/packages/" .. pkg_name
+    -- The tool's managed install directory, to match a client's resolved binary path;
+    -- falls back to matching by client name when lvim-pkg or the path is unavailable.
+    local ok, pkg = pcall(require, "lvim-pkg")
+    local pkg_dir = ok and type(pkg.package_path) == "function" and pkg.package_path(name) or nil
     for _, client in ipairs(vim.lsp.get_clients()) do
         local cmd = client.config and client.config.cmd
         local exe = type(cmd) == "table" and cmd[1] or ""
-        if vim.startswith(exe, pkg_dir) or client.name == pkg_name then
+        if client.name == name or (pkg_dir and exe ~= "" and vim.startswith(exe, pkg_dir)) then
             -- Detach only from buffers actually attached to this client.
             for bufnr in pairs(client.attached_buffers or {}) do
                 if vim.api.nvim_buf_is_valid(bufnr) then
@@ -118,20 +119,23 @@ function M.init()
         pkg.on("installing", function(active)
             lsp_manager.set_installation_status(active)
         end)
+        -- Stop an LSP client BEFORE lvim-pkg deletes its tool's binary (avoids crashes /
+        -- stale in-flight responses), then again after, for any straggler. Mason-kind only.
+        pkg.on("removing", function(kind, name)
+            if kind == "mason" then
+                on_tool_removed(name)
+            end
+        end)
+        pkg.on("removed", function(kind, name)
+            if kind == "mason" then
+                on_tool_removed(name)
+            end
+        end)
     end
 
     local group = vim.api.nvim_create_augroup("LvimLspEnable", { clear = true })
     local startup = state.config.startup_delay_ms
     local dir_ms = state.config.dir_change_delay_ms
-
-    -- Stop LSP clients when Mason uninstalls their package.
-    -- Listen on :start so the client stops before Mason deletes the binary files,
-    -- preventing server crashes (missing modules) and stale in-flight LSP responses.
-    local ok, mason_registry = pcall(require, "mason-registry")
-    if ok and mason_registry then
-        mason_registry:on("package:uninstall:start", vim.schedule_wrap(on_mason_uninstall))
-        mason_registry:on("package:uninstall:success", vim.schedule_wrap(on_mason_uninstall))
-    end
 
     vim.defer_fn(function()
         -- Attach when Neovim sets the filetype on a buffer
