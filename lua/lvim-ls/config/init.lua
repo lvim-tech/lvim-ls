@@ -1,6 +1,8 @@
 -- lvim-ls: default DATA configuration (engine only — no UI here).
 -- Merges the data sections; UI config (ui/highlights) lives in lvim-lsp and is
 -- injected at setup. Loaded once by state.lua; users override via lvim-lsp.setup(opts).
+--
+---@module "lvim-ls.config"
 
 local lsp = require("lvim-ls.config.lsp")
 local features = require("lvim-ls.config.features")

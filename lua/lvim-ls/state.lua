@@ -215,21 +215,21 @@ M.efm_filetypes = M.config.efm.filetypes
 M.bin_aliases = {}
 
 local function build_bin_aliases(file_types)
-	local aliases = {}
-	local function scan(list)
-		for _, tool in ipairs(list or {}) do
-			if type(tool) == "table" and tool[1] and tool.bin then
-				aliases[tool[1]] = tool.bin
-			end
-		end
-	end
-	for _, entry in pairs(file_types) do
-		scan(entry.lsp)
-		scan(entry.formatters)
-		scan(entry.linters)
-		scan(entry.debuggers)
-	end
-	return aliases
+    local aliases = {}
+    local function scan(list)
+        for _, tool in ipairs(list or {}) do
+            if type(tool) == "table" and tool[1] and tool.bin then
+                aliases[tool[1]] = tool.bin
+            end
+        end
+    end
+    for _, entry in pairs(file_types) do
+        scan(entry.lsp)
+        scan(entry.formatters)
+        scan(entry.linters)
+        scan(entry.debuggers)
+    end
+    return aliases
 end
 
 M.bin_aliases = build_bin_aliases(M.file_types)
@@ -237,11 +237,11 @@ M.bin_aliases = build_bin_aliases(M.file_types)
 --- Merge user config over defaults and refresh convenience aliases.
 ---@param user_config LvimLspConfig
 function M.configure(user_config)
-	---@type LvimLspConfig
-	M.config = vim.tbl_deep_extend("force", M.config, user_config or {})
-	M.file_types = M.config.file_types
-	M.efm_filetypes = M.config.efm.filetypes
-	M.bin_aliases = build_bin_aliases(M.file_types)
+    ---@type LvimLspConfig
+    M.config = vim.tbl_deep_extend("force", M.config, user_config or {})
+    M.file_types = M.config.file_types
+    M.efm_filetypes = M.config.efm.filetypes
+    M.bin_aliases = build_bin_aliases(M.file_types)
 end
 
 return M

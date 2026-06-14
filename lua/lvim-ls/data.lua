@@ -13,14 +13,14 @@ local M = {}
 ---@param ft string
 ---@return table<string, string[]>  server_name → missing dependency names
 function M.missing_for_ft(ft)
-	local out = {}
-	for _, server_name in ipairs(manager.get_compatible_lsp_for_ft(ft)) do
-		local missing = manager.missing_tools_for_server(server_name)
-		if #missing > 0 then
-			out[server_name] = missing
-		end
-	end
-	return out
+    local out = {}
+    for _, server_name in ipairs(manager.get_compatible_lsp_for_ft(ft)) do
+        local missing = manager.missing_tools_for_server(server_name)
+        if #missing > 0 then
+            out[server_name] = missing
+        end
+    end
+    return out
 end
 
 --- Flat list of LvimPkgItem describing every missing Mason tool for `ft`.
@@ -28,13 +28,13 @@ end
 ---@param ft string
 ---@return table[]
 function M.items_for_ft(ft)
-	local items = {}
-	for server_name, tools in pairs(M.missing_for_ft(ft)) do
-		for _, tool in ipairs(tools) do
-			items[#items + 1] = { kind = "mason", name = tool, label = tool, group = server_name }
-		end
-	end
-	return items
+    local items = {}
+    for server_name, tools in pairs(M.missing_for_ft(ft)) do
+        for _, tool in ipairs(tools) do
+            items[#items + 1] = { kind = "mason", name = tool, label = tool, group = server_name }
+        end
+    end
+    return items
 end
 
 return M
