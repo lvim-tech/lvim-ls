@@ -10,6 +10,8 @@ answers "what servers/tools does this filetype need, what is running, what is
 missing", while `lvim-lsp` decides how to show it and `lvim-pkg` /
 `lvim-installer` decide how to install it.
 
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD--3--Clause-blue.svg)](https://github.com/lvim-tech/lvim-ls/blob/main/LICENSE)
+
 ## Architecture
 
 ```
@@ -37,6 +39,10 @@ No global namespace is touched: every module reads and writes through
 `lvim-ls` is the engine behind [lvim-lsp](https://github.com/lvim-tech/lvim-lsp)
 and is normally installed as its dependency — you do not configure it directly.
 
+`lvim-ls` is a LIBRARY — it has no `setup()` of its own; it is configured through
+`lvim-lsp`. The methods below install the engine (and its dependencies); the
+options are passed via `lvim-lsp.setup`.
+
 ### LVIM IDE
 
 Pulled in automatically as a dependency of `lvim-lsp`:
@@ -48,13 +54,35 @@ modules["lvim-tech/lvim-lsp"] = {
 }
 ```
 
-### Standalone (lazy.nvim)
+### lazy.nvim
 
-```text
-{
-  "lvim-tech/lvim-ls",
-  dependencies = { "lvim-tech/lvim-pkg" },
+```lua
+return {
+    "lvim-tech/lvim-ls",
+    dependencies = { "lvim-tech/lvim-pkg" },
+    -- no config(): a library, configured through lvim-lsp
 }
+```
+
+### Native (vim.pack / packadd)
+
+```lua
+-- In your init.lua, after the plugin is on the runtimepath. No setup() — the
+-- engine is driven by lvim-lsp; require its modules directly when embedding it.
+vim.pack.add({
+    { src = "https://github.com/lvim-tech/lvim-pkg" },
+    { src = "https://github.com/lvim-tech/lvim-ls" },
+})
+```
+
+### packer.nvim
+
+```lua
+use({
+    "lvim-tech/lvim-ls",
+    requires = { "lvim-tech/lvim-pkg" },
+    -- no config: a library, configured through lvim-lsp
+})
 ```
 
 ## Usage
