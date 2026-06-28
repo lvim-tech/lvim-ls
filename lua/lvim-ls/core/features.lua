@@ -239,11 +239,39 @@ function M.apply_buffer_features(client, bufnr)
             vim.schedule(function()
                 local effective = root and project.get_feature(root, "inlay_hints", ih_global) or ih_global
                 if eval_flag(effective) then
+                    -- A server restart re-attaches to an already-open buffer where inlay hints may still
+                    -- be enabled from the previous client; enable(true) is then a no-op and the stale
+                    -- hints linger until `:e`. Toggle off first to force a fresh request against the new
+                    -- client (so e.g. a flipped `Lua.hint.enable` takes effect on restart, not after :e).
+                    if vim.lsp.inlay_hint.is_enabled({ bufnr = bufnr }) then
+                        vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
+                    end
                     vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
                 end
             end)
         end
     end
+end
+
+--- Force a fresh inlay-hint request for `bufnr`. Neovim does NOT re-pull inlay hints when a server's
+--- configuration changes (it only re-requests on a buffer edit or a server-side refresh), so a live
+--- server-side toggle like lua_ls `Lua.hint.enable` would otherwise linger until `:e`. Toggling the
+--- per-buffer state off→on clears the stale hints and issues a new request. No-op when hints are off.
+---@param bufnr integer
+function M.refresh_inlay_hints(bufnr)
+    if not (vim.lsp.inlay_hint and type(bufnr) == "number" and vim.api.nvim_buf_is_valid(bufnr)) then
+        return
+    end
+    local ok, enabled = pcall(vim.lsp.inlay_hint.is_enabled, { bufnr = bufnr })
+    if not (ok and enabled) then
+        return
+    end
+    vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
+    vim.schedule(function()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+            vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+        end
+    end)
 end
 
 return M
