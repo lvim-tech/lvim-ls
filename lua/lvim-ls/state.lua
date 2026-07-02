@@ -12,6 +12,8 @@
 
 ---@class LvimLspState
 ---@field config              LvimLspConfig            Back-compat re-export of the live `lvim-ls.config` table
+---@field file_types          table<string, LvimLspFileTypeEntry>  Live ref to config.file_types (module_key → entry)
+---@field efm_filetypes       string[]                 Live ref to config.efm.filetypes
 ---@field bin_aliases         table<string, string>
 ---@field clients_by_root     table<string, table<string, integer>>
 ---@field disabled_servers    table<string, boolean>
@@ -31,6 +33,14 @@ local M = {}
 --- configure() merges into it in place, so this reference always reflects effective values.
 ---@type LvimLspConfig
 M.config = config
+
+--- Live references into the config that the runtime readers (core.manager, core.bootstrap) access directly as
+--- `state.file_types` / `state.efm_filetypes`. Set here and RE-POINTED by configure(): `file_types` is a map
+--- (merge recurses in place) but `efm.filetypes` is an ARRAY the merge REPLACES, so the ref must be refreshed.
+---@type table<string, LvimLspFileTypeEntry>
+M.file_types = config.file_types or {}
+---@type string[]
+M.efm_filetypes = (config.efm and config.efm.filetypes) or {}
 
 -- ── LSP lifecycle state ───────────────────────────────────────────────────────
 
@@ -149,6 +159,9 @@ function M.configure(user_config)
         end
     end
     M.bin_aliases = build_bin_aliases(config.file_types)
+    -- Re-point the back-compat runtime refs — `efm.filetypes` is an array the merge may have replaced.
+    M.file_types = config.file_types or {}
+    M.efm_filetypes = (config.efm and config.efm.filetypes) or {}
     -- Surface malformed file_types entries once, at configure time (lazy require avoids a
     -- load-time cycle with the notify util).
     local problems = validate_file_types(config.file_types)
