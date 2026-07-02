@@ -6,6 +6,7 @@
 
 local state = require("lvim-ls.state")
 local notify = require("lvim-ls.utils.notify")
+local project = require("lvim-ls.core.project")
 local M = {}
 
 -- ── Diagnostics ───────────────────────────────────────────────────────────────
@@ -185,7 +186,6 @@ function M.apply_buffer_features(client, bufnr)
         return
     end
 
-    local project = require("lvim-ls.core.project")
     local root = type(client.config) == "table" and client.config.root_dir or nil
     local group = vim.api.nvim_create_augroup("LvimLspFeatures_" .. bufnr .. "_" .. client.id, { clear = true })
 

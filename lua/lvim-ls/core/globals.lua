@@ -4,11 +4,12 @@
 -- These take precedence over static user-config defaults, but per-project
 -- .lvim-ls/config.lua can still override them at the buffer level.
 --
--- Load order inside lvim-ls.setup():
---   1. state.configure(user_opts)   ← static defaults + user config
+-- lvim-ls has no setup() of its own — the driver is lvim-lsp.setup(), which calls
+-- these in order:
+--   1. state.configure(data_opts)   ← live config defaults + user config
 --   2. globals.load()               ← persisted interactive overrides  ← HERE
---   3. features.setup_diagnostics() ← reads the now-updated state
---   4. features.setup_code_lens()   ← reads the now-updated state
+--   3. features.setup_diagnostics() ← reads the now-updated state.config
+--   4. features.setup_code_lens()   ← reads the now-updated state.config
 --
 ---@module "lvim-ls.core.globals"
 
@@ -32,7 +33,7 @@ local function read_disk()
 end
 
 --- Load persisted globals and apply them on top of state.config.
---- Called once in lvim-ls.setup(), after state.configure() and before
+--- Called once from lvim-lsp.setup(), after state.configure() and before
 --- features.setup_diagnostics() / features.setup_code_lens().
 function M.load()
     local data = read_disk()

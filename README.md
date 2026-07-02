@@ -16,18 +16,19 @@ missing", while `lvim-lsp` decides how to show it and `lvim-pkg` /
 
 ```
 lvim-ls/
-  state.lua          shared module state — replaces all _G.* globals
+  state.lua          shared runtime state — replaces all _G.* globals
+  config/            the live config: lsp / features / progress / message defaults
   data.lua           missing-tool reporting for the unified installer prompt
-  config/            data-only defaults (lsp / features / progress / message)
+  health.lua         :checkhealth lvim-ls
   core/
-    bootstrap.lua    one-time engine setup
+    bootstrap.lua    one-time engine setup (autocmds + initial sweep)
     manager.lua      LSP client lifecycle (start / attach / detach / enable)
-    project.lua      project-root resolution and per-root server sets
-    schema.lua       server/tool requirement schema
-    features.lua     per-filetype feature resolution
+    project.lua      project-root resolution and per-project overrides
+    schema.lua       per-server settings-form schema resolver (get/set/resolve/apply)
+    features.lua     per-buffer LSP feature setup (diagnostics / codelens / on_attach)
     progress.lua     $/progress aggregation (data only)
-    dap.lua          debug-adapter requirements
-    globals.lua      runtime globals/env wiring
+    dap.lua          registers DAP adapters + configurations from server configs
+    globals.lua      JSON persistence of interactively-toggled feature flags
   utils/             notify / debug / levels helpers
 ```
 
@@ -43,16 +44,20 @@ and is normally installed as its dependency — you do not configure it directly
 `lvim-lsp`. The methods below install the engine (and its dependencies); the
 options are passed via `lvim-lsp.setup`.
 
-### LVIM IDE
+Requires Neovim >= 0.10.
 
-Pulled in automatically as a dependency of `lvim-lsp`:
+### lvim-installer (recommended)
 
-```lua
-modules["lvim-tech/lvim-lsp"] = {
-    dependencies = { "lvim-tech/lvim-ls", "lvim-tech/lvim-utils" },
-    opts = { ... }, -- engine + UI options, configured through lvim-lsp
-}
+Install and manage it from the LVIM package manager — open the **Plugins** tab and
+install / update / pin it:
+
+```vim
+:LvimInstaller plugins
 ```
+
+lvim-installer installs plugins through Neovim's built-in `vim.pack`, so no external
+plugin manager is needed. `lvim-ls` is pulled in automatically as a dependency of
+`lvim-lsp`.
 
 ### lazy.nvim
 
@@ -64,17 +69,6 @@ return {
 }
 ```
 
-### Native (vim.pack / packadd)
-
-```lua
--- In your init.lua, after the plugin is on the runtimepath. No setup() — the
--- engine is driven by lvim-lsp; require its modules directly when embedding it.
-vim.pack.add({
-    { src = "https://github.com/lvim-tech/lvim-pkg" },
-    { src = "https://github.com/lvim-tech/lvim-ls" },
-})
-```
-
 ### packer.nvim
 
 ```lua
@@ -82,6 +76,17 @@ use({
     "lvim-tech/lvim-ls",
     requires = { "lvim-tech/lvim-pkg" },
     -- no config: a library, configured through lvim-lsp
+})
+```
+
+### Native (vim.pack)
+
+```lua
+-- In your init.lua, after the plugin is on the runtimepath. No setup() — the
+-- engine is driven by lvim-lsp; require its modules directly when embedding it.
+vim.pack.add({
+    { src = "https://github.com/lvim-tech/lvim-pkg" },
+    { src = "https://github.com/lvim-tech/lvim-ls" },
 })
 ```
 

@@ -31,36 +31,36 @@ No global namespace is touched: every module reads and writes through
 ==============================================================================
 2. ARCHITECTURE                                       *lvim-ls-architecture*
 
-  state.lua          shared module state — replaces all _G.* globals
+  state.lua          shared runtime state — replaces all _G.* globals
+  config/            the live config: lsp / features / progress / message defaults
   data.lua           missing-tool reporting for the unified installer prompt
-  config/            data-only defaults (lsp / features / progress / message)
+  health.lua         :checkhealth lvim-ls
   core/
     bootstrap.lua    one-time engine setup (autocmds + initial sweep)
     manager.lua      LSP client lifecycle (start / attach / detach / enable)
-    project.lua      project-root resolution and per-root server sets
-    schema.lua       server/tool requirement schema
-    features.lua     per-filetype feature resolution
+    project.lua      project-root resolution and per-project overrides
+    schema.lua       per-server settings-form schema resolver (get/set/resolve/apply)
+    features.lua     per-buffer LSP feature setup (diagnostics / codelens / on_attach)
     progress.lua     $/progress aggregation (data only)
-    dap.lua          debug-adapter requirements
-    globals.lua      runtime globals/env wiring
+    dap.lua          registers DAP adapters + configurations from server configs
+    globals.lua      JSON persistence of interactively-toggled feature flags
   utils/             notify / debug / levels helpers
 
 ==============================================================================
 3. INSTALLATION                                       *lvim-ls-installation*
 
 lvim-ls is the engine behind lvim-lsp and is normally installed as its
-dependency — you do not configure it directly.
+dependency — you do not configure it directly. Requires Neovim >= 0.10.
 
-LVIM IDE (pulled in as a dependency of lvim-lsp): >lua
-  modules["lvim-tech/lvim-lsp"] = {
-      dependencies = { "lvim-tech/lvim-ls", "lvim-tech/lvim-utils" },
-      opts = { ... },  -- engine + UI options, configured through lvim-lsp
-  }
+lvim-installer (recommended) — install / update / pin it from the Plugins tab of
+the LVIM package manager, which installs through Neovim's built-in vim.pack: >vim
+  :LvimInstaller plugins
 <
 Standalone (lazy.nvim): >lua
   {
       "lvim-tech/lvim-ls",
       dependencies = { "lvim-tech/lvim-pkg" },
+      -- no config(): a library, configured through lvim-lsp
   }
 <
 ==============================================================================
@@ -112,6 +112,15 @@ table and aggregated into a single `efm-langserver` client — there is no
 external efm.lua. A tool the server needs but Mason has not installed suppresses
 the server start; lvim-installer offers the missing tools via the unified prompt.
 
+Per-project overrides live under `.lvim-ls/` at the project root and are managed
+through `lvim-ls.core.project`: >lua
+  local project = require("lvim-ls.core.project")
+  project.list_overrides(root)          -- { servers, filetypes, efm_tools, has_config }
+  project.clear_config(root)            -- drop the project feature overrides
+  project.clear_server(root, "gopls")   -- drop a per-server settings override
+  project.clear_ft(root, "go")          -- drop a per-filetype override
+  project.clear_efm_tool(root, "prettier")
+<
 ==============================================================================
 6. INSTALLER INTEGRATION                                      *lvim-ls-data*
 

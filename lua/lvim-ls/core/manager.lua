@@ -12,6 +12,7 @@ local notify = require("lvim-ls.utils.notify")
 local debug = require("lvim-ls.utils.debug")
 local project = require("lvim-ls.core.project")
 local dap = require("lvim-ls.core.dap")
+local features = require("lvim-ls.core.features")
 
 local M = {}
 
@@ -443,7 +444,7 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
                 if type(lsp_cfg) == "table" and type(lsp_cfg.on_attach) == "function" then
                     pcall(lsp_cfg.on_attach, client, bufnr)
                 end
-                pcall(require("lvim-ls.core.features").apply_buffer_features, client, bufnr)
+                pcall(features.apply_buffer_features, client, bufnr)
             end
             return client_id
         end
@@ -493,7 +494,7 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
                 if config.on_attach then
                     pcall(config.on_attach, client, attached_bufnr)
                 end
-                pcall(require("lvim-ls.core.features").apply_buffer_features, client, attached_bufnr)
+                pcall(features.apply_buffer_features, client, attached_bufnr)
             end
         end,
     }, { bufnr = bufnr })

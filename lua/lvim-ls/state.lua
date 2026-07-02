@@ -1,171 +1,17 @@
--- lvim-ls: shared module state — replaces all _G.lsp_* and _G.LVIM.* globals.
--- All other modules read/write through this table so that no global namespace
--- pollution occurs and the plugin remains composable.
+-- lvim-ls: shared RUNTIME state — replaces all _G.lsp_* and _G.LVIM.* globals.
+-- All other modules read/write their runtime bookkeeping through this table so that no
+-- global namespace pollution occurs and the plugin remains composable.
+--
+-- The live CONFIG is NOT owned here — it lives in `lvim-ls.config` (the canonical config
+-- module). `M.config` below is a back-compat RE-EXPORT of that exact table (a stable alias
+-- external consumers such as lvim-lsp and the user config read as `lvim-ls.state.config`).
+-- `M.configure()` merges user options INTO the live config table in place, so both this
+-- re-export and every `require("lvim-ls.config")` reader always see the effective values.
 --
 ---@module "lvim-ls.state"
 
----@class LvimLspNotifyConfig
----@field enabled   boolean          Set to false to silence all notifications (default: true)
----@field min_level integer          Minimum vim.log.levels.* to display (default: INFO)
----@field title     string           Notification popup title (default: "Lvim LSP")
-
----@class LvimLspDebugConfig
----@field enabled   boolean          Set to true to enable file-based debug logging (default: false)
----@field min_level integer          Minimum level to record (default: DEBUG)
-
----@class LvimLspInfoIconsConfig
----@field server  string|nil
----@field section string|nil
----@field item    string|nil
----@field check   string|nil
----@field mason   string|nil
----@field fold    string|nil
----@field error   string|nil
----@field warn    string|nil
----@field info    string|nil
----@field hint    string|nil
-
----@class LvimLspInfoConfig
----@field popup_title string                    Title shown at the top of the info window
----@field icons       LvimLspInfoIconsConfig|nil
----@field highlights  LvimLspInfoHighlightsConfig|nil
-
----@class LvimLspEfmConfig
----@field filetypes  string[]  Filetypes EFM should handle even when no tool config is registered
----@field executable string    EFM binary name used for PATH checks (default: "efm-langserver")
-
----@class LvimLspCommandsConfig
-
----@class LvimLspDiagnosticSignsConfig
----@field error string|nil
----@field warn  string|nil
----@field hint  string|nil
----@field info  string|nil
-
----@class LvimLspDiagnosticsConfig
----@field popup_title     string    Title shown in the floating diagnostics window (default: " Diagnostics")
----@field show_line       fun()|nil  Override for LspShowDiagnosticCurrent (default: vim.diagnostic.open_float)
----@field goto_next       fun()|nil  Override for LspShowDiagnosticNext    (default: vim.diagnostic.jump({ count = 1 }))
----@field goto_prev       fun()|nil  Override for LspShowDiagnosticPrev    (default: vim.diagnostic.jump({ count = -1 }))
----@field virtual_text    boolean|nil
----@field virtual_lines   boolean|nil
----@field underline       boolean|nil
----@field severity_sort   boolean|nil
----@field update_in_insert boolean|nil
----@field signs           LvimLspDiagnosticSignsConfig|nil
-
----@class LvimLspFeaturesConfig
----@field document_highlight boolean
----@field auto_format         boolean
----@field inlay_hints         boolean
-
----@class LvimLspCodeLensConfig
----@field enabled boolean
-
----@class LvimLspFormConfig
----@field after_apply string  "Stay" | "Close"
-
----@class LvimLspProgressPanelConfig
----@field name      string|nil  Header bar text (default: "LSP Progress")
----@field icon      string|nil  Header icon
----@field header_hl string|nil  Highlight group for the header bar
-
----@class LvimLspProgressHighlightsConfig
----@field icon       string|nil  Highlight for spinner/done icon (default: "Question")
----@field server     string|nil  Highlight for server name      (default: "Title")
----@field title      string|nil  Highlight for in-progress title (default: "WarningMsg")
----@field done       string|nil  Highlight for done title/icon  (default: "Constant")
----@field message    string|nil  Highlight for message text     (default: "Comment")
----@field percentage string|nil  Highlight for percentage value (default: "Special")
-
----@class LvimLspProgressConfig
----@field enabled      boolean                           Enable/disable the progress subsystem (default: true)
----@field ignore       string[]                          Server names to suppress (default: {})
----@field done_ttl     integer                      Ms to keep a completed entry visible (default: 2000)
----@field spinner      string[]                     Animation frames cycled during active progress
----@field done_icon    string                       Icon shown when a token completes (default: "✓")
----@field render_limit integer                           Max concurrent entries in the panel (default: 4)
----@field panel        LvimLspProgressPanelConfig        Progress panel header appearance
----@field highlights   LvimLspProgressHighlightsConfig   Per-element highlight groups
-
----@alias LvimLspTool string | { [1]: string, bin: string }
-
----@class LvimLspFileTypeEntry
----@field filetypes  string[]
----@field lsp        LvimLspTool[]|nil
----@field formatters LvimLspTool[]|nil
----@field linters    LvimLspTool[]|nil
----@field debuggers  LvimLspTool[]|nil
-
----@class LvimLspMenuConfig
----@field title    string|nil
----@field subtitle string|nil
-
----@class LvimLspMenusConfig
----@field toggle_servers        LvimLspMenuConfig
----@field toggle_servers_buffer LvimLspMenuConfig
----@field restart               LvimLspMenuConfig
----@field reattach              LvimLspMenuConfig
----@field declined              LvimLspMenuConfig
-
----@class LvimLspProjectTabConfig
----@field label string
----@field icon  string|nil
-
----@class LvimLspProjectTabsConfig
----@field servers    LvimLspProjectTabConfig
----@field formatters LvimLspProjectTabConfig
----@field linters    LvimLspProjectTabConfig
----@field filetypes  LvimLspProjectTabConfig
----@field global     LvimLspProjectTabConfig
-
----@class LvimLspProjectConfig
----@field title_icon string|nil
----@field tabs       LvimLspProjectTabsConfig
-
----@class LvimLspInfoHighlightsConfig
----@field icon       string|nil
----@field server     string|nil
----@field section    string|nil
----@field key        string|nil
----@field value      string|nil
----@field config_key string|nil
----@field separator  string|nil
----@field linter     string|nil
----@field formatter  string|nil
----@field tool       string|nil
----@field buffer     string|nil
----@field fold       string|nil
-
----@class LvimLspConfig
----@field file_types          table<string, LvimLspFileTypeEntry>  REQUIRED. module_key → entry
----@field server_config_dirs  string[]                  Lua require prefixes searched in order for server configs
----@field efm                 LvimLspEfmConfig
----@field info                LvimLspInfoConfig
----@field commands            LvimLspCommandsConfig
----@field menus               LvimLspMenusConfig
----@field project             LvimLspProjectConfig
----@field diagnostics         LvimLspDiagnosticsConfig
----@field features            LvimLspFeaturesConfig
----@field code_lens           LvimLspCodeLensConfig
----@field form                LvimLspFormConfig
----@field popup_global        table
----@field progress            LvimLspProgressConfig
----@field highlights          table<string, table>|nil  User overrides for LvimLsp* groups (applied on top of palette defaults)
----@field force              boolean                   true = always override theme-defined highlight groups (default: false)
----@field build              fun():table<string,table> Returns fresh LvimLsp* highlight definitions from the current palette
----@field on_attach           fun(client:any,bufnr:integer)|nil  Global on_attach called for every server
----@field on_dir_change       fun()|nil                 Called on DirChanged after stop_servers (e.g. fidget clear)
----@field startup_delay_ms    integer                   Defer ms before autocmds fire (default: 100)
----@field dir_change_delay_ms integer                   Defer ms before project-cleanup runs (default: 5000)
----@field notify              LvimLspNotifyConfig
----@field debug               LvimLspDebugConfig
----@field dap_local_fn        fun()|nil                 When set, adds :LvimLsp dap subcommand
-
 ---@class LvimLspState
----@field config              LvimLspConfig
----@field file_types          table<string, LvimLspFileTypeEntry>
----@field efm_filetypes       string[]
+---@field config              LvimLspConfig            Back-compat re-export of the live `lvim-ls.config` table
 ---@field bin_aliases         table<string, string>
 ---@field clients_by_root     table<string, table<string, integer>>
 ---@field disabled_servers    table<string, boolean>
@@ -174,9 +20,17 @@
 ---@field installation_in_progress boolean
 ---@field not_in_registry     table<string, boolean>
 
-local defaults = require("lvim-ls.config")
+local config = require("lvim-ls.config")
+local ok_utils, utils = pcall(require, "lvim-utils.utils")
 
 local M = {}
+
+-- ── Live config (re-export) ───────────────────────────────────────────────────
+
+--- Back-compat re-export of the live config. Source of truth is `require("lvim-ls.config")`;
+--- configure() merges into it in place, so this reference always reflects effective values.
+---@type LvimLspConfig
+M.config = config
 
 -- ── LSP lifecycle state ───────────────────────────────────────────────────────
 
@@ -200,20 +54,16 @@ M.installation_in_progress = false
 ---@type table<string, boolean>
 M.not_in_registry = {}
 
--- ── Default configuration ─────────────────────────────────────────────────────
-
----@type LvimLspConfig
-M.config = vim.deepcopy(defaults)
-
--- Convenience aliases updated by configure() — avoids deep lookups in hot paths
-M.file_types = M.config.file_types
-M.efm_filetypes = M.config.efm.filetypes
+-- ── Derived caches ────────────────────────────────────────────────────────────
 
 --- Maps Mason package name → installed binary name for tools that differ.
---- Built from bin fields in file_types entries.
+--- Derived from the `bin` fields in the live config's file_types; rebuilt by configure().
 ---@type table<string, string>
 M.bin_aliases = {}
 
+--- Scan the live config's file_types entries and build the { package = bin } alias map.
+---@param file_types table<string, LvimLspFileTypeEntry>
+---@return table<string, string>
 local function build_bin_aliases(file_types)
     local aliases = {}
     local function scan(list)
@@ -232,7 +82,7 @@ local function build_bin_aliases(file_types)
     return aliases
 end
 
-M.bin_aliases = build_bin_aliases(M.file_types)
+M.bin_aliases = build_bin_aliases(config.file_types)
 
 --- Validate the shape of `file_types` and collect human-readable problems. Catches the
 --- common config mistakes (wrong types) so they surface as a warning instead of silently
@@ -285,17 +135,23 @@ local function validate_file_types(file_types)
     return problems
 end
 
---- Merge user config over defaults and refresh convenience aliases.
+--- Merge user config into the live config IN PLACE and refresh derived caches.
+--- Uses lvim-utils.utils.merge (clean array replace); falls back to an in-place
+--- tbl_deep_extend copy-back only when lvim-utils is unavailable, so the re-export
+--- and every require("lvim-ls.config") reader keep pointing at the same live table.
 ---@param user_config LvimLspConfig
 function M.configure(user_config)
-    ---@type LvimLspConfig
-    M.config = vim.tbl_deep_extend("force", M.config, user_config or {})
-    M.file_types = M.config.file_types
-    M.efm_filetypes = M.config.efm.filetypes
-    M.bin_aliases = build_bin_aliases(M.file_types)
+    if ok_utils and utils.merge then
+        utils.merge(config, user_config or {})
+    elseif user_config then
+        for k, v in pairs(vim.tbl_deep_extend("force", config, user_config)) do
+            config[k] = v
+        end
+    end
+    M.bin_aliases = build_bin_aliases(config.file_types)
     -- Surface malformed file_types entries once, at configure time (lazy require avoids a
     -- load-time cycle with the notify util).
-    local problems = validate_file_types(M.file_types)
+    local problems = validate_file_types(config.file_types)
     if #problems > 0 then
         require("lvim-ls.utils.notify")(
             ("lvim-ls config: %d file_types issue(s):\n  %s"):format(#problems, table.concat(problems, "\n  ")),
