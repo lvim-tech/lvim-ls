@@ -8,6 +8,7 @@
 local state = require("lvim-ls.state")
 local lsp_manager = require("lvim-ls.core.manager")
 local project = require("lvim-ls.core.project")
+local features = require("lvim-ls.core.features")
 local data = require("lvim-ls.data")
 
 local M = {}
@@ -159,6 +160,34 @@ function M.init()
                         apply_ft_settings(bufnr)
                     end
                 end, 100)
+            end,
+        })
+
+        -- Prune per-buffer / per-client bookkeeping so it can't grow unbounded.
+        -- LspDetach: clear the buffer's feature augroup once no LSP client remains, and drop
+        -- a fully-exited client's stale ids from the manager's clients_by_root cache.
+        vim.api.nvim_create_autocmd("LspDetach", {
+            group = group,
+            callback = function(ev)
+                local buf = ev.buf
+                local cid = ev.data and ev.data.client_id
+                vim.schedule(function()
+                    if not vim.api.nvim_buf_is_valid(buf) or #vim.lsp.get_clients({ bufnr = buf }) == 0 then
+                        features.clear_buffer_features(buf)
+                    end
+                    if cid and not vim.lsp.get_client_by_id(cid) then
+                        lsp_manager.prune_client(cid)
+                    end
+                end)
+            end,
+        })
+
+        -- BufWipeout: drop the buffer's per-buffer disable overrides and feature augroup.
+        vim.api.nvim_create_autocmd("BufWipeout", {
+            group = group,
+            callback = function(ev)
+                state.disabled_for_buffer[ev.buf] = nil
+                features.clear_buffer_features(ev.buf)
             end,
         })
 

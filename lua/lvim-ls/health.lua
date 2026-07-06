@@ -16,10 +16,12 @@ function M.check()
     h.start("lvim-ls")
 
     -- ── core ──────────────────────────────────────────────────────────────────
-    if vim.fn.has("nvim-0.10") == 1 and type(vim.lsp) == "table" and vim.lsp.start then
-        h.ok("built-in vim.lsp available (vim.lsp.start / get_clients)")
+    -- The engine uses ≥ 0.12 APIs (vim.lsp.codelens.enable(enable, filter),
+    -- vim.lsp.inlay_hint.enable) so gate on 0.12, not 0.10.
+    if vim.fn.has("nvim-0.12") == 1 and type(vim.lsp) == "table" and vim.lsp.start then
+        h.ok("built-in vim.lsp available (Neovim >= 0.12)")
     else
-        h.error("Neovim >= 0.10 with built-in vim.lsp is required")
+        h.error("Neovim >= 0.12 with built-in vim.lsp is required")
     end
 
     -- ── lvim-pkg (soft dependency) ────────────────────────────────────────────

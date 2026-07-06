@@ -87,6 +87,35 @@ local function is_client_attached_to_buffer(client_id, bufnr)
     return false
 end
 
+-- Clients already warned about a failing on_attach hook (one WARN per client, not per save).
+---@type table<integer, boolean>
+local attach_warned = {}
+
+--- Run the attach hooks — global on_attach, the server's own on_attach, then feature wiring —
+--- for `client` on `bufnr`. Surfaces the FIRST failure per client as a WARN instead of silently
+--- swallowing it in a bare pcall (a broken keymap/hook was previously invisible).
+---@param client any
+---@param bufnr  integer
+---@param server_on_attach fun(client: any, bufnr: integer)|nil
+local function run_attach_hooks(client, bufnr, server_on_attach)
+    local function guard(fn)
+        if type(fn) ~= "function" then
+            return
+        end
+        local ok, err = pcall(fn, client, bufnr)
+        if not ok and client and not attach_warned[client.id] then
+            attach_warned[client.id] = true
+            notify(
+                string.format("%s: on_attach hook failed: %s", client.name or "lsp", tostring(err)),
+                vim.log.levels.WARN
+            )
+        end
+    end
+    guard(state.config.on_attach)
+    guard(server_on_attach)
+    guard(features.apply_buffer_features)
+end
+
 -- ── Internal EFM config builder ───────────────────────────────────────────────
 
 --- Builds the EFM server config from all registered tool configurations.
@@ -150,7 +179,6 @@ local function build_efm_lsp_config(root_dir)
         name = "efm",
         cmd = { "efm-langserver" },
         filetypes = filetypes,
-        single_file_support = true,
         init_options = {
             documentFormatting = true,
             documentRangeFormatting = true,
@@ -331,6 +359,15 @@ M.ensure_lsp_for_buffer = function(server_name, bufnr)
         return nil
     end
 
+    -- ── Fast path: already attached ───────────────────────────────────────────
+    -- Hoisted above the root fs-walk and the per-tool executable() probes below: those
+    -- run on every BufEnter otherwise, even when the client is already serving the buffer.
+    for _, c in ipairs(vim.lsp.get_clients({ bufnr = bufnr })) do
+        if c.name == server_name then
+            return c.id
+        end
+    end
+
     -- ── Early deps check from file_types (no module load needed) ──────────────
     -- If any tool the server needs is missing, do not start it. lvim-installer
     -- offers the missing tools via the unified prompt; meanwhile register the
@@ -438,13 +475,11 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
                 )
                 vim.lsp.buf_attach_client(bufnr, client_id)
                 local lsp_cfg = mod.lsp and mod.lsp.config
-                if state.config.on_attach then
-                    pcall(state.config.on_attach, client, bufnr)
-                end
-                if type(lsp_cfg) == "table" and type(lsp_cfg.on_attach) == "function" then
-                    pcall(lsp_cfg.on_attach, client, bufnr)
-                end
-                pcall(features.apply_buffer_features, client, bufnr)
+                local srv_on_attach = type(lsp_cfg) == "table"
+                        and type(lsp_cfg.on_attach) == "function"
+                        and lsp_cfg.on_attach
+                    or nil
+                run_attach_hooks(client, bufnr, srv_on_attach)
             end
             return client_id
         end
@@ -478,26 +513,18 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
         end
     end
 
-    local new_client_id = vim.lsp.start({
-        name = config.name or server_name,
-        cmd = config.cmd,
-        root_dir = config.root_dir,
-        settings = config.settings,
-        init_options = config.init_options,
-        before_init = config.before_init,
-        capabilities = config.capabilities,
-        on_attach = function(client, attached_bufnr)
-            if attached_bufnr == bufnr then
-                if state.config.on_attach then
-                    pcall(state.config.on_attach, client, attached_bufnr)
-                end
-                if config.on_attach then
-                    pcall(config.on_attach, client, attached_bufnr)
-                end
-                pcall(features.apply_buffer_features, client, attached_bufnr)
-            end
-        end,
-    }, { bufnr = bufnr })
+    -- Start from the FULL (deep-copied) config so handlers / on_init / on_exit / cmd_env /
+    -- flags / … survive — a field whitelist silently dropped them. Only override the fields
+    -- we own (name, root_dir, on_attach). vim.lsp.start ignores keys it doesn't recognise.
+    config.name = config.name or server_name
+    config.root_dir = root_dir
+    local server_on_attach = type(config.on_attach) == "function" and config.on_attach or nil
+    config.on_attach = function(client, attached_bufnr)
+        if attached_bufnr == bufnr then
+            run_attach_hooks(client, attached_bufnr, server_on_attach)
+        end
+    end
+    local new_client_id = vim.lsp.start(config, { bufnr = bufnr })
 
     if new_client_id then
         state.clients_by_root[server_name][root_dir] = new_client_id
@@ -529,6 +556,21 @@ M.safe_detach_client = function(bufnr, client_id)
         return true
     end
     return false
+end
+
+--- Prune per-client bookkeeping after a client has fully exited: drop any stale ids from
+--- clients_by_root and clear its one-shot attach-warning flag. Called from the LspDetach
+--- handler once `get_client_by_id` no longer resolves the id.
+---@param client_id integer
+M.prune_client = function(client_id)
+    attach_warned[client_id] = nil
+    for _, roots in pairs(state.clients_by_root) do
+        for root, id in pairs(roots) do
+            if id == client_id then
+                roots[root] = nil
+            end
+        end
+    end
 end
 
 --- Adds `server_name` to the global disabled list and stops all running instances.
@@ -654,7 +696,11 @@ M.start_language_server = function(server_name, force)
                 local buf_ft = vim.bo[buf].filetype
                 if buf_ft ~= "" and M.is_lsp_compatible_with_ft(server_name, buf_ft) then
                     if not M.is_server_disabled_for_buffer(server_name, buf) then
-                        vim.lsp.buf_attach_client(buf, client_id)
+                        -- Per-root reuse + hook wiring, NOT a raw cross-root buf_attach_client:
+                        -- attaching one client to a differently-rooted buffer skipped on_attach /
+                        -- feature setup and left that buffer's own root client to spawn later
+                        -- (two efm clients → duplicated diagnostics / double formatting).
+                        M.ensure_lsp_for_buffer(server_name, buf)
                     end
                 end
             end
@@ -791,6 +837,9 @@ M.setup_efm = function(filetypes, tools_config)
         end
         efm_restart_timer = vim.uv.new_timer()
         if not efm_restart_timer then
+            -- Never leave the busy flag stuck true: every later setup_efm would otherwise
+            -- re-defer itself forever and EFM registration would wedge permanently.
+            efm_setup_in_progress = false
             return
         end
         efm_restart_timer:start(
@@ -811,7 +860,8 @@ M.setup_efm = function(filetypes, tools_config)
                     end
                 end
                 vim.defer_fn(function()
-                    M.start_language_server("efm", true)
+                    -- pcall so a throw in the start path can't leave the busy flag stuck true.
+                    pcall(M.start_language_server, "efm", true)
                     efm_setup_in_progress = false
                 end, efm_running and 200 or 0)
             end)

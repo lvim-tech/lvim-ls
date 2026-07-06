@@ -44,14 +44,27 @@ local function ensure_dir(path)
 end
 
 --- Load a Lua file that returns a table.
---- Returns an empty table when the file is absent or invalid.
+--- Returns an empty table when the file is absent, untrusted, or invalid.
+---
+--- The file lives inside an arbitrary opened repository, so executing it is the exrc
+--- problem: gate it behind Neovim's trust database. `vim.secure.read` prompts once per
+--- file (allow / deny / remember) and returns the contents only when trusted — returning
+--- nil (→ `{}` here) when the user declines or the file changed since it was trusted.
 ---@param path string
 ---@return table
 local function load_file(path)
     if vim.fn.filereadable(path) ~= 1 then
         return {}
     end
-    local ok, result = pcall(dofile, path)
+    local contents = vim.secure.read(path)
+    if type(contents) ~= "string" then
+        return {}
+    end
+    local chunk = loadstring(contents, "@" .. path)
+    if not chunk then
+        return {}
+    end
+    local ok, result = pcall(chunk)
     return (ok and type(result) == "table") and result or {}
 end
 

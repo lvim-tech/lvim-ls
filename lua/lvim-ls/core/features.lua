@@ -114,7 +114,9 @@ function M.run_code_lens()
 end
 
 --- Initialise CodeLens based on state.config.code_lens.enabled.
---- Uses vim.lsp.codelens.enable(bufnr, bool) — the non-deprecated API (Neovim ≥ 0.12).
+--- Uses the native `vim.lsp.codelens.enable(enable, { bufnr })` API (Neovim ≥ 0.12).
+--- Not pcall-wrapped: enable() never throws for a valid buffer, so a signature drift
+--- surfaces loudly instead of silently no-op'ing (the historical CodeLens bug).
 ---@return nil
 function M.setup_code_lens()
     local cfg = state.config.code_lens
@@ -125,7 +127,7 @@ function M.setup_code_lens()
     local function set_for_all_bufs(enabled)
         for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
             if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then
-                pcall(vim.lsp.codelens.enable, enabled, { bufnr = bufnr })
+                vim.lsp.codelens.enable(enabled, { bufnr = bufnr })
             end
         end
     end
@@ -137,7 +139,7 @@ function M.setup_code_lens()
             group = group,
             callback = function(ev)
                 if state.config.code_lens.enabled then
-                    pcall(vim.lsp.codelens.enable, true, { bufnr = ev.buf })
+                    vim.lsp.codelens.enable(true, { bufnr = ev.buf })
                 end
             end,
         })
@@ -177,16 +179,59 @@ end
 
 -- ── Per-buffer on_attach hooks ────────────────────────────────────────────────
 
+--- Buffers whose feature augroup is already wired. ONE group per buffer (not per
+--- client): the document-highlight / auto-format callbacks re-check LIVE client
+--- capabilities, so a single group serves every client attached to the buffer (a
+--- main server + efm) — instead of N formatting clients each installing their own
+--- BufWritePre that then formats with ALL clients (the N×N save fan-out).
+---@type table<integer, integer>  bufnr → augroup id
+M._feature_groups = {}
+
+---@param val boolean|fun():boolean|nil
+---@return boolean
 local function eval_flag(val)
     if type(val) == "function" then
-        return val()
+        return val() == true
     end
     return val == true
 end
 
---- Called from manager._start_server_for_buffer's on_attach for every client.
---- Applies document_highlight, auto_format, and inlay_hints.
---- Project config (.lvim-ls.lua) overrides global config.features values.
+--- Enable inlay hints for `bufnr`, honouring the project override. Applied per client
+--- attach because the inlay-hint capability is per client, while the enabled state is
+--- per buffer (so a restart re-pulls hints against the fresh client).
+---@param client any
+---@param bufnr  integer
+---@param root   string|nil
+local function apply_inlay_hints(client, bufnr, root)
+    if not (vim.lsp.inlay_hint and client.server_capabilities.inlayHintProvider) then
+        return
+    end
+    local feat = state.config.features
+    local ih_global = feat and feat.inlay_hints
+    if ih_global == nil then
+        return
+    end
+    vim.schedule(function()
+        local effective = ih_global
+        if root then
+            effective = project.get_feature(root, "inlay_hints", ih_global)
+        end
+        if eval_flag(effective) then
+            -- A server restart re-attaches to an already-open buffer where inlay hints may still
+            -- be enabled from the previous client; enable(true) is then a no-op and the stale
+            -- hints linger until `:e`. Toggle off first to force a fresh request against the new
+            -- client (so e.g. a flipped `Lua.hint.enable` takes effect on restart, not after :e).
+            if vim.lsp.inlay_hint.is_enabled({ bufnr = bufnr }) then
+                vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
+            end
+            vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+        end
+    end)
+end
+
+--- Called from manager's on_attach for every client attached to `bufnr`.
+--- Wires document_highlight + auto_format ONCE per buffer (capabilities re-checked live)
+--- and applies inlay hints per client. Project config (.lvim-ls) overrides global features.
 ---@param client any
 ---@param bufnr  integer
 function M.apply_buffer_features(client, bufnr)
@@ -194,12 +239,19 @@ function M.apply_buffer_features(client, bufnr)
     if not feat then
         return
     end
-
     local root = type(client.config) == "table" and client.config.root_dir or nil
-    local group = vim.api.nvim_create_augroup("LvimLspFeatures_" .. bufnr .. "_" .. client.id, { clear = true })
+
+    apply_inlay_hints(client, bufnr, root)
+
+    -- Buffer-scoped autocmds are created only on the FIRST attach for the buffer.
+    if M._feature_groups[bufnr] then
+        return
+    end
+    local group = vim.api.nvim_create_augroup("LvimLspFeatures_" .. bufnr, { clear = true })
+    M._feature_groups[bufnr] = group
 
     -- Document highlight (no project override — always global)
-    if feat.document_highlight and client.server_capabilities.documentHighlightProvider then
+    if feat.document_highlight then
         vim.api.nvim_create_autocmd("CursorHold", {
             buffer = bufnr,
             group = group,
@@ -226,16 +278,16 @@ function M.apply_buffer_features(client, bufnr)
         })
     end
 
-    -- Auto-format on save (project config overrides global)
-    local af_global = feat.auto_format
-    if af_global ~= nil and client.server_capabilities.documentFormattingProvider then
+    -- Auto-format on save (project config overrides global). vim.lsp.buf.format already
+    -- filters to the formatting-capable clients, so ONE BufWritePre covers main + efm.
+    if feat.auto_format ~= nil then
         vim.api.nvim_create_autocmd("BufWritePre", {
             buffer = bufnr,
             group = group,
             callback = function()
-                local effective = af_global
+                local effective = feat.auto_format
                 if root then
-                    effective = project.get_feature(root, "auto_format", af_global)
+                    effective = project.get_feature(root, "auto_format", feat.auto_format)
                 end
                 if eval_flag(effective) then
                     vim.lsp.buf.format({ bufnr = bufnr })
@@ -243,28 +295,16 @@ function M.apply_buffer_features(client, bufnr)
             end,
         })
     end
+end
 
-    -- Inlay hints (project config overrides global)
-    if vim.lsp.inlay_hint and client.server_capabilities.inlayHintProvider then
-        local ih_global = feat.inlay_hints
-        if ih_global ~= nil then
-            vim.schedule(function()
-                local effective = ih_global
-                if root then
-                    effective = project.get_feature(root, "inlay_hints", ih_global)
-                end
-                if eval_flag(effective) then
-                    -- A server restart re-attaches to an already-open buffer where inlay hints may still
-                    -- be enabled from the previous client; enable(true) is then a no-op and the stale
-                    -- hints linger until `:e`. Toggle off first to force a fresh request against the new
-                    -- client (so e.g. a flipped `Lua.hint.enable` takes effect on restart, not after :e).
-                    if vim.lsp.inlay_hint.is_enabled({ bufnr = bufnr }) then
-                        vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
-                    end
-                    vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
-                end
-            end)
-        end
+--- Tear down the buffer's feature augroup — called when the last LSP client detaches or
+--- the buffer is wiped, so M._feature_groups (and its autocmds) don't leak for dead buffers.
+---@param bufnr integer
+function M.clear_buffer_features(bufnr)
+    local group = M._feature_groups[bufnr]
+    if group then
+        pcall(vim.api.nvim_del_augroup_by_id, group)
+        M._feature_groups[bufnr] = nil
     end
 end
 

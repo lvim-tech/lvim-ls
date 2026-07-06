@@ -113,15 +113,18 @@ local function handle_progress(ev)
         t.message = value.message or "Completed"
         t.percentage = nil
         fire()
-        -- Keep the "done" state visible briefly, then drop it.
+        -- Keep the "done" state visible briefly, then drop it — but only if it is STILL the
+        -- same finished entry. A reused token that began a fresh cycle before this TTL fired
+        -- replaced `t` with a new table (identity differs), and must not be killed here.
         vim.defer_fn(function()
-            if _tokens[client_id] then
-                _tokens[client_id][token] = nil
-                if vim.tbl_isempty(_tokens[client_id]) then
+            local bucket = _tokens[client_id]
+            if bucket and bucket[token] == t then
+                bucket[token] = nil
+                if vim.tbl_isempty(bucket) then
                     _tokens[client_id] = nil
                 end
+                fire()
             end
-            fire()
         end, cfg().done_ttl or 2000)
     end
 end
@@ -151,6 +154,13 @@ function M.setup()
                 return
             end
             vim.schedule(function()
+                -- LspDetach also fires when a SINGLE buffer detaches from a client that is
+                -- still attached (and progressing) elsewhere. Only wipe the client's tokens
+                -- once it is truly gone — no client, or no buffers left attached.
+                local client = vim.lsp.get_client_by_id(cid)
+                if client and next(client.attached_buffers or {}) then
+                    return
+                end
                 if _tokens[cid] then
                     _tokens[cid] = nil
                     fire()
