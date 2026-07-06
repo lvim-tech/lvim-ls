@@ -597,18 +597,7 @@ M.enable_lsp_server_for_buffer = function(server_name, bufnr)
             end
         end
         if not already_attached then
-            local client_id
-            for _, client in ipairs(vim.lsp.get_clients()) do
-                if client.name == server_name then
-                    client_id = client.id
-                    break
-                end
-            end
-            if client_id then
-                pcall(vim.lsp.buf_attach_client, bufnr, client_id)
-            else
-                M.ensure_lsp_for_buffer(server_name, bufnr)
-            end
+            M.ensure_lsp_for_buffer(server_name, bufnr)
         end
     end
     return true
@@ -729,7 +718,7 @@ M.stop_servers_for_old_project = function()
             else
                 client_root = tostring(client.config.root_dir)
             end
-            if client_root ~= current_dir and not vim.startswith(client_root, current_dir) then
+            if client_root ~= current_dir and not vim.startswith(client_root, current_dir .. "/") then
                 local cid = client.id
                 vim.schedule(function()
                     local c = vim.lsp.get_client_by_id(cid)

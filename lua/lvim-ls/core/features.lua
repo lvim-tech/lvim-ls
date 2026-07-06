@@ -9,6 +9,18 @@ local notify = require("lvim-ls.utils.notify")
 local project = require("lvim-ls.core.project")
 local M = {}
 
+local function code_lenses(bufnr)
+    local raw = vim.lsp.codelens.get({ bufnr = bufnr }) or {}
+    local out = {}
+    for _, item in ipairs(raw) do
+        local lens = item.lens or item
+        if lens and lens.range then
+            out[#out + 1] = lens
+        end
+    end
+    return out
+end
+
 -- ── Diagnostics ───────────────────────────────────────────────────────────────
 
 --- Applies state.config.diagnostics to vim.diagnostic and registers sign symbols.
@@ -74,8 +86,7 @@ function M.run_code_lens()
         return
     end
     local line = vim.api.nvim_win_get_cursor(0)[1] - 1
-    ---@type { range: { start: { line: integer, character: integer } } }[]
-    local lenses = vim.lsp.codelens.get({ bufnr = 0 } --[[@as any]]) or {} ---@diagnostic disable-line: param-type-mismatch
+    local lenses = code_lenses(0)
 
     for _, lens in ipairs(lenses) do
         if lens.range.start.line == line then
@@ -114,7 +125,7 @@ function M.setup_code_lens()
     local function set_for_all_bufs(enabled)
         for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
             if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then
-                pcall(vim.lsp.codelens.enable, bufnr, enabled)
+                pcall(vim.lsp.codelens.enable, enabled, { bufnr = bufnr })
             end
         end
     end
@@ -126,7 +137,7 @@ function M.setup_code_lens()
             group = group,
             callback = function(ev)
                 if state.config.code_lens.enabled then
-                    pcall(vim.lsp.codelens.enable, ev.buf, true)
+                    pcall(vim.lsp.codelens.enable, true, { bufnr = ev.buf })
                 end
             end,
         })
@@ -149,20 +160,18 @@ function M.setup_code_lens()
 
         vim.keymap.set("n", "<2-LeftMouse>", function()
             if not state.config.code_lens.enabled then
-                vim.api.nvim_input("<2-LeftMouse>")
-                return
+                return "<2-LeftMouse>"
             end
             local line = vim.api.nvim_win_get_cursor(0)[1] - 1
-            ---@type { range: { start: { line: integer, character: integer } } }[]
-            local buf_lenses = vim.lsp.codelens.get({ bufnr = 0 } --[[@as any]]) or {} ---@diagnostic disable-line: param-type-mismatch
+            local buf_lenses = code_lenses(0)
             for _, lens in ipairs(buf_lenses) do
                 if lens.range.start.line == line then
                     vim.lsp.codelens.run()
-                    return
+                    return ""
                 end
             end
-            vim.api.nvim_input("<2-LeftMouse>")
-        end, { noremap = true, silent = true })
+            return "<2-LeftMouse>"
+        end, { noremap = true, silent = true, expr = true })
     end
 end
 
@@ -219,12 +228,15 @@ function M.apply_buffer_features(client, bufnr)
 
     -- Auto-format on save (project config overrides global)
     local af_global = feat.auto_format
-    if af_global ~= false and af_global ~= nil and client.server_capabilities.documentFormattingProvider then
+    if af_global ~= nil and client.server_capabilities.documentFormattingProvider then
         vim.api.nvim_create_autocmd("BufWritePre", {
             buffer = bufnr,
             group = group,
             callback = function()
-                local effective = root and project.get_feature(root, "auto_format", af_global) or af_global
+                local effective = af_global
+                if root then
+                    effective = project.get_feature(root, "auto_format", af_global)
+                end
                 if eval_flag(effective) then
                     vim.lsp.buf.format({ bufnr = bufnr })
                 end
@@ -235,9 +247,12 @@ function M.apply_buffer_features(client, bufnr)
     -- Inlay hints (project config overrides global)
     if vim.lsp.inlay_hint and client.server_capabilities.inlayHintProvider then
         local ih_global = feat.inlay_hints
-        if ih_global ~= false and ih_global ~= nil then
+        if ih_global ~= nil then
             vim.schedule(function()
-                local effective = root and project.get_feature(root, "inlay_hints", ih_global) or ih_global
+                local effective = ih_global
+                if root then
+                    effective = project.get_feature(root, "inlay_hints", ih_global)
+                end
                 if eval_flag(effective) then
                     -- A server restart re-attaches to an already-open buffer where inlay hints may still
                     -- be enabled from the previous client; enable(true) is then a no-op and the stale
