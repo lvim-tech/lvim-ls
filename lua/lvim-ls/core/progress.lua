@@ -125,7 +125,7 @@ local function handle_progress(ev)
                 end
                 fire()
             end
-        end, cfg().done_ttl or 2000)
+        end, cfg().done_ttl or 5000)
     end
 end
 
