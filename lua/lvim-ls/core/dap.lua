@@ -1,6 +1,9 @@
 -- lvim-ls: DAP adapter and configuration registration.
 -- Called after a server's mason dependencies are confirmed installed.
--- nvim-dap is an optional dependency — silently skips when not available.
+-- The DAP client is an optional dependency — silently skips when not available.
+-- lvim-dap (the lvim-tech engine) is preferred; a client exposing the same
+-- `adapters` / `configurations` assignment contract under the module name
+-- "dap" is used as a fallback, so either engine receives the registrations.
 --
 -- Expected dap field format in server configs:
 --   dap = {
@@ -19,7 +22,10 @@ function M.setup(dap_config)
     if not dap_config then
         return
     end
-    local ok, dap = pcall(require, "dap")
+    local ok, dap = pcall(require, "lvim-dap")
+    if not ok then
+        ok, dap = pcall(require, "dap")
+    end
     if not ok then
         return
     end
