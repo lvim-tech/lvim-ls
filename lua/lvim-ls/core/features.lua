@@ -113,6 +113,46 @@ function M.run_code_lens()
     end
 end
 
+--- Bind the CodeLens double-click on an LSP-attached buffer.
+---
+--- BUFFER-LOCAL by design. A mouse mapping is process-wide and the LAST registration WINS, so binding
+--- `<2-LeftMouse>` GLOBALLY (as this did) silently overrode the ecosystem's panel mouse-lock
+--- (`lvim-utils.mouse`) — and this handler's `return "<2-LeftMouse>"` fall-through then ran nvim's NATIVE
+--- double-click, which selects the WORD under the pointer. Inside a UI panel (the LSP outline, the file tree)
+--- that replaced the row's full-width selection bar with a Visual patch over its label. CodeLens only ever
+--- applies to a real, LSP-attached code buffer — which is exactly where this map belongs, and where it can no
+--- longer reach a panel at all.
+---@param bufnr integer
+local function bind_codelens_click(bufnr)
+    if not vim.api.nvim_buf_is_valid(bufnr) or vim.b[bufnr].lvim_codelens_click then
+        return
+    end
+    vim.b[bufnr].lvim_codelens_click = true
+    vim.keymap.set("n", "<2-LeftMouse>", function()
+        -- Buffer-local is NOT sufficient on its own, and this guard is NOT belt-and-suspenders. A mouse map is
+        -- resolved against the CURRENT buffer, but the POINTER may be somewhere else entirely: clicking into the
+        -- LSP outline while this code buffer is current fires THIS map — and the fall-through below
+        -- (`return "<2-LeftMouse>"`) then runs nvim's NATIVE double-click, which selects the WORD under the
+        -- pointer, i.e. inside the panel. Any mouse map that can fall through must first ask the mouse layer
+        -- whether the pointer is over a panel.
+        local ok, mouse = pcall(require, "lvim-utils.mouse")
+        if ok and mouse.should_swallow() then
+            return ""
+        end
+        if not state.config.code_lens.enabled then
+            return "<2-LeftMouse>"
+        end
+        local line = vim.api.nvim_win_get_cursor(0)[1] - 1
+        for _, lens in ipairs(code_lenses(0)) do
+            if lens.range.start.line == line then
+                vim.lsp.codelens.run()
+                return ""
+            end
+        end
+        return "<2-LeftMouse>"
+    end, { buffer = bufnr, noremap = true, silent = true, expr = true })
+end
+
 --- Initialise CodeLens based on state.config.code_lens.enabled.
 --- Uses the native `vim.lsp.codelens.enable(enable, { bufnr })` API (Neovim ≥ 0.12).
 --- Not pcall-wrapped: enable() never throws for a valid buffer, so a signature drift
@@ -134,12 +174,18 @@ function M.setup_code_lens()
 
     if cfg.enabled then
         set_for_all_bufs(true)
+        for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then
+                bind_codelens_click(bufnr)
+            end
+        end
         local group = vim.api.nvim_create_augroup("LvimLspCodeLens", { clear = true })
         vim.api.nvim_create_autocmd("LspAttach", {
             group = group,
             callback = function(ev)
                 if state.config.code_lens.enabled then
                     vim.lsp.codelens.enable(true, { bufnr = ev.buf })
+                    bind_codelens_click(ev.buf)
                 end
             end,
         })
@@ -152,28 +198,13 @@ function M.setup_code_lens()
         set_for_all_bufs(false)
     end
 
-    -- Register commands and double-click (idempotent)
+    -- Register commands (idempotent)
     if not M._commands_registered then
         M._commands_registered = true
 
         vim.api.nvim_create_user_command("LspCodeLensRun", function()
             M.run_code_lens()
         end, {})
-
-        vim.keymap.set("n", "<2-LeftMouse>", function()
-            if not state.config.code_lens.enabled then
-                return "<2-LeftMouse>"
-            end
-            local line = vim.api.nvim_win_get_cursor(0)[1] - 1
-            local buf_lenses = code_lenses(0)
-            for _, lens in ipairs(buf_lenses) do
-                if lens.range.start.line == line then
-                    vim.lsp.codelens.run()
-                    return ""
-                end
-            end
-            return "<2-LeftMouse>"
-        end, { noremap = true, silent = true, expr = true })
     end
 end
 
