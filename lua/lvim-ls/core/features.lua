@@ -158,6 +158,48 @@ end
 --- Not pcall-wrapped: enable() never throws for a valid buffer, so a signature drift
 --- surfaces loudly instead of silently no-op'ing (the historical CodeLens bug).
 ---@return nil
+--- Semantic tokens, per `config.semantic_tokens` — a ONE-TIME global setting, not per buffer.
+---
+--- `debounce` is why this exists. The core arms a `vim.defer_fn` timer per change, and `STHighlighter:on_detach`
+--- drops the client's state WITHOUT stopping that timer, while `reset_timer` reads `state.timer` with no nil
+--- guard. So a detach inside the debounce window — a project switch in lvim-space wipes the old project's
+--- buffers, detaching their clients — leaves a timer that fires on a dead state and throws
+--- `semantic_tokens.lua:790: attempt to index local 'state' (a nil value)`. With `debounce = 0` no timer is ever
+--- armed: the request goes straight out, so there is nothing left behind to fire. Raise it once the core guards
+--- the timer (the missing guard is a Neovim bug, not ours).
+---
+--- The debounce lives on the highlighter CLASS (its prototype default), which the core exports as
+--- `vim.lsp.semantic_tokens.__STHighlighter` — so one assignment covers every buffer, with no deprecated call
+--- (`semantic_tokens.start(…, { debounce })` is deprecated and warns).
+function M.setup_semantic_tokens()
+    local st = state.config.semantic_tokens
+    if not st then
+        return
+    end
+    if st.enabled == false then
+        pcall(vim.lsp.semantic_tokens.enable, false)
+        return
+    end
+    --- Write the debounce onto the highlighter CLASS (its prototype default), so every buffer inherits it.
+    local function apply()
+        local cls = vim.lsp.semantic_tokens.__STHighlighter --[[@as table?]]
+        if type(cls) == "table" and type(st.debounce) == "number" then
+            cls.debounce = st.debounce
+        end
+    end
+    apply()
+    -- ALSO on every attach: the semantic-tokens module is loaded LAZILY, so a value written during our own
+    -- `setup()` can be handed back to a class table that is only created afterwards. Re-asserting on LspAttach
+    -- costs one field assignment and makes the setting independent of load order.
+    if not M._st_group then
+        M._st_group = vim.api.nvim_create_augroup("LvimLsSemanticTokens", { clear = true })
+        vim.api.nvim_create_autocmd("LspAttach", {
+            group = M._st_group,
+            callback = apply,
+        })
+    end
+end
+
 function M.setup_code_lens()
     local cfg = state.config.code_lens
     if not cfg then
