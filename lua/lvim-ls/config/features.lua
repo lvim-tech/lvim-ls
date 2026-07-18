@@ -30,7 +30,7 @@ return {
     },
 
     diagnostics = {
-        popup_title = " Diagnostics",
+        popup_title = "Diagnostics",
         show_line = nil,
         goto_next = nil,
         goto_prev = nil,

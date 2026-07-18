@@ -49,7 +49,7 @@
 ---@field info  string|nil
 
 ---@class LvimLspDiagnosticsConfig
----@field popup_title     string    Title shown in the floating diagnostics window (default: " Diagnostics")
+---@field popup_title     string    Title shown in the floating diagnostics window (default: "Diagnostics")
 ---@field show_line       fun()|nil  Override for LspShowDiagnosticCurrent (default: vim.diagnostic.open_float)
 ---@field goto_next       fun()|nil  Override for LspShowDiagnosticNext    (default: vim.diagnostic.jump({ count = 1 }))
 ---@field goto_prev       fun()|nil  Override for LspShowDiagnosticPrev    (default: vim.diagnostic.jump({ count = -1 }))
