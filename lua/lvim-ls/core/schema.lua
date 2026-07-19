@@ -101,10 +101,8 @@ local function flatten(t, prefix, out)
             })
         end
     end
-    -- Sort for stable display order
-    table.sort(out, function(a, b)
-        return a.key < b.key
-    end)
+    -- NB: the caller sorts ONCE after the full walk. Sorting here re-sorted the whole list on every
+    -- recursion level (per nested subtree) for no benefit — the final sort is what shows anyway.
 end
 
 -- ── Server config loader ──────────────────────────────────────────────────────
@@ -192,6 +190,10 @@ function M.resolve(server_name, root_dir, bufnr)
     -- ── Raw mode ──────────────────────────────────────────────────────────────
     local flat = {}
     flatten(merged, "", flat)
+    -- Sort ONCE, after the full recursive walk, for stable display order.
+    table.sort(flat, function(a, b)
+        return a.key < b.key
+    end)
 
     local fields = {}
     for _, f in ipairs(flat) do

@@ -153,11 +153,6 @@ local function bind_codelens_click(bufnr)
     end, { buffer = bufnr, noremap = true, silent = true, expr = true })
 end
 
---- Initialise CodeLens based on state.config.code_lens.enabled.
---- Uses the native `vim.lsp.codelens.enable(enable, { bufnr })` API (Neovim ≥ 0.12).
---- Not pcall-wrapped: enable() never throws for a valid buffer, so a signature drift
---- surfaces loudly instead of silently no-op'ing (the historical CodeLens bug).
----@return nil
 --- Semantic tokens, per `config.semantic_tokens` — a ONE-TIME global setting, not per buffer.
 ---
 --- `debounce` is why this exists. The core arms a `vim.defer_fn` timer per change, and `STHighlighter:on_detach`
@@ -200,6 +195,11 @@ function M.setup_semantic_tokens()
     end
 end
 
+--- Initialise CodeLens based on state.config.code_lens.enabled.
+--- Uses the native `vim.lsp.codelens.enable(enable, { bufnr })` API (Neovim ≥ 0.12).
+--- Not pcall-wrapped: enable() never throws for a valid buffer, so a signature drift
+--- surfaces loudly instead of silently no-op'ing (the historical CodeLens bug).
+---@return nil
 function M.setup_code_lens()
     local cfg = state.config.code_lens
     if not cfg then

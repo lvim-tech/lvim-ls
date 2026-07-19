@@ -118,6 +118,12 @@ end
 
 -- ── Internal EFM config builder ───────────────────────────────────────────────
 
+--- The configured EFM binary name (config.efm.executable, default "efm-langserver").
+---@return string
+local function efm_executable()
+    return (state.config.efm or {}).executable or "efm-langserver"
+end
+
 --- Builds the EFM server config from all registered tool configurations.
 --- When `root_dir` is given, per-project overrides (enabled/command) are applied.
 --- This is the canonical EFM config source — no external efm.lua needed.
@@ -177,7 +183,7 @@ local function build_efm_lsp_config(root_dir)
 
     return {
         name = "efm",
-        cmd = { "efm-langserver" },
+        cmd = { efm_executable() },
         filetypes = filetypes,
         init_options = {
             documentFormatting = true,
@@ -275,6 +281,17 @@ local function is_missing(dep)
     return vim.fn.executable(mason_bin_dir .. bin) ~= 1
 end
 
+--- Is EFM missing? A custom binary named in config.efm.executable that is already on PATH satisfies
+--- the dependency (so it is NOT flagged); otherwise fall back to the Mason-package probe. Without this,
+--- config.efm.executable was decorative — the engine hardcoded "efm-langserver" everywhere.
+---@return boolean
+local function efm_missing()
+    if vim.fn.executable(efm_executable()) == 1 then
+        return false
+    end
+    return is_missing("efm-langserver")
+end
+
 --- Resolve a tool's executable to a runnable path: PATH first, then lvim-pkg's managed bin
 --- dir (where lvim-pkg links the tools it installs), then the legacy Mason bin dir. Returns
 --- the resolved path, or nil when the binary is nowhere to be found.
@@ -309,8 +326,8 @@ end
 M.missing_tools_for_server = function(server_name)
     local missing = {}
     if server_name == "efm" then
-        if is_missing("efm-langserver") then
-            missing[1] = "efm-langserver"
+        if efm_missing() then
+            missing[1] = efm_executable()
         end
         return missing
     end
@@ -332,8 +349,8 @@ M.missing_tools_for_server = function(server_name)
     check_list(ft_entry.debuggers)
     -- EFM is needed when the server registers formatters or linters.
     if #(ft_entry.formatters or {}) > 0 or #(ft_entry.linters or {}) > 0 then
-        if is_missing("efm-langserver") then
-            table.insert(missing, "efm-langserver")
+        if efm_missing() then
+            table.insert(missing, efm_executable())
         end
     end
     return missing
@@ -407,9 +424,9 @@ M.ensure_lsp_for_buffer = function(server_name, bufnr)
                 config = efm_cfg,
             },
         }
-        -- Ensure efm-langserver binary is available before trying to start it.
-        -- When missing, lvim-installer offers it via the unified prompt.
-        if is_missing("efm-langserver") then
+        -- Ensure the EFM binary is available before trying to start it (the configured executable if
+        -- it is on PATH, else the Mason package). When missing, lvim-installer offers it.
+        if efm_missing() then
             return nil
         end
     else
