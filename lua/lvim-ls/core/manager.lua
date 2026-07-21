@@ -258,6 +258,36 @@ M.get_compatible_lsp_for_ft = function(ft)
     return result
 end
 
+--- Runtime-register a language with the engine (the additive seam a plugin shipping its OWN
+--- server uses, e.g. lvim-lang): merge its file_types `entry` through the canonical
+--- state.configure path (clean array replace, bin-alias rebuild, validation), append its
+--- server-config `dir_prefix` to the live server_config_dirs array, and attach the server to
+--- any already-open buffers of its filetypes. Symmetric with how lvim-lsp.setup injects
+--- file_types/server_config_dirs, but callable AFTER setup and without a re-run.
+---@param name       string  server module key (also the require suffix <dir_prefix>.<name>)
+---@param entry      LvimLspFileTypeEntry  { filetypes, lsp = {}, formatters?, linters?, debuggers? }
+---@param dir_prefix string  require prefix holding the server-config module
+M.register_language = function(name, entry, dir_prefix)
+    -- Merge the entry through the official path so bin_aliases/validation stay coherent.
+    -- configure() merges partial config in place; `patch` is intentionally partial.
+    ---@type table
+    local patch = { file_types = { [name] = entry } }
+    state.configure(patch)
+    -- Append the dir prefix to the LIVE array (never through configure — merge REPLACES arrays,
+    -- which would drop the dirs lvim-lsp already injected).
+    state.config.server_config_dirs = state.config.server_config_dirs or {}
+    local dirs = state.config.server_config_dirs
+    if not vim.tbl_contains(dirs, dir_prefix) then
+        dirs[#dirs + 1] = dir_prefix
+    end
+    -- Attach to buffers already open in these filetypes (registration may happen after files load).
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_valid(bufnr) and vim.tbl_contains(entry.filetypes or {}, vim.bo[bufnr].filetype) then
+            M.ensure_lsp_for_buffer(name, bufnr)
+        end
+    end
+end
+
 -- Mason bin directory; only this is checked for tool presence so that tools
 -- installed outside Mason (system packages, mise, pipx …) do not suppress the
 -- install prompt offered by lvim-installer.

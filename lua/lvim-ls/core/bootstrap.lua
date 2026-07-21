@@ -48,7 +48,7 @@ function M.attach_lsp_to_buffer(bufnr)
     end
 end
 
---- Apply saved per-filetype editor options (.lvim-ls/filetypes/<ft>.lua) to `bufnr`.
+--- Apply saved per-filetype editor options (.lvim/ls/filetypes/<ft>.lua) to `bufnr`.
 ---@param bufnr integer
 local function apply_ft_settings(bufnr)
     if not vim.api.nvim_buf_is_valid(bufnr) then

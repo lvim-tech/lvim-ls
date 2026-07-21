@@ -5,7 +5,7 @@
 --   Raw mode     — no schema; settings are flattened to key-value pairs
 --
 -- Value resolution order (highest → lowest priority):
---   1. Project override  (.lvim-ls/servers/<name>.lua)
+--   1. Project override  (.lvim/ls/servers/<name>.lua)
 --   2. Live client       (client.config.settings)
 --   3. Module defaults   (mod.lsp.config.settings)
 --

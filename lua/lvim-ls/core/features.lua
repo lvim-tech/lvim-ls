@@ -304,7 +304,7 @@ end
 
 --- Called from manager's on_attach for every client attached to `bufnr`.
 --- Wires document_highlight + auto_format ONCE per buffer (capabilities re-checked live)
---- and applies inlay hints per client. Project config (.lvim-ls) overrides global features.
+--- and applies inlay hints per client. Project config (.lvim/ls) overrides global features.
 ---@param client any
 ---@param bufnr  integer
 function M.apply_buffer_features(client, bufnr)

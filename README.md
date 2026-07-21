@@ -109,7 +109,7 @@ local servers = manager.get_compatible_lsp_for_ft("go")
 local missing = manager.missing_tools_for_server("gopls")
 manager.restart_server("gopls") -- stop all instances and re-attach served buffers
 
--- Per-project overrides under .lvim-ls/ (show / reset, used by the UI):
+-- Per-project overrides under .lvim/ls/ (show / reset, used by the UI):
 local project = require("lvim-ls.core.project")
 local overrides = project.list_overrides(vim.uv.cwd()) -- servers / filetypes / efm_tools
 project.clear_server(vim.uv.cwd(), "gopls")

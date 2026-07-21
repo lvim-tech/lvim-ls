@@ -1,15 +1,12 @@
 -- lvim-ls: project-local configuration loader/writer.
 --
--- Directory layout (preferred):
---   .lvim-ls/
+-- Directory layout (the unified ".lvim/<plugin>/" project namespace shared across lvim-tech):
+--   .lvim/ls/
 --   ├── config.lua          ← project overrides (disable, auto_format, …)
 --   ├── servers/
 --   │   └── <server>.lua    ← per-server settings overrides
 --   └── filetypes/
 --       └── <ft>.lua        ← per-filetype editor settings
---
--- Legacy: .lvim-ls.lua in the project root is still read as a fallback
--- for config.lua when the directory form does not exist.
 --
 ---@module "lvim-ls.core.project"
 
@@ -17,8 +14,7 @@ local M = {}
 
 -- ── Constants ─────────────────────────────────────────────────────────────────
 
-local DIR = ".lvim-ls"
-local LEGACY_FILE = ".lvim-ls.lua"
+local DIR = ".lvim/ls"
 local CONFIG_FILE = "config.lua"
 local SERVERS_DIR = "servers"
 local FT_DIR = "filetypes"
@@ -171,8 +167,7 @@ end
 
 -- ── Public: config (project overrides) ───────────────────────────────────────
 
---- Load (and cache) the project config for `root_dir`.
---- Prefers .lvim-ls/config.lua; falls back to legacy .lvim-ls.lua.
+--- Load (and cache) the project config for `root_dir` (.lvim/ls/config.lua).
 ---@param root_dir string
 ---@return table
 function M.load(root_dir)
@@ -180,14 +175,11 @@ function M.load(root_dir)
         return _config_cache[root_dir]
     end
     local cfg = load_file(config_path(root_dir))
-    if vim.tbl_isempty(cfg) then
-        cfg = load_file(root_dir .. "/" .. LEGACY_FILE)
-    end
     _config_cache[root_dir] = cfg
     return cfg
 end
 
---- Persist project config overrides to .lvim-ls/config.lua.
+--- Persist project config overrides to .lvim/ls/config.lua.
 ---@param root_dir string
 ---@param data     table
 ---@return boolean
@@ -206,7 +198,7 @@ function M.invalidate(root_dir)
     _config_cache[root_dir] = nil
 end
 
---- Returns the path to .lvim-ls/config.lua (creates dir if needed).
+--- Returns the path to .lvim/ls/config.lua (creates dir if needed).
 ---@param root_dir string
 ---@return string
 function M.config_path(root_dir)
@@ -251,7 +243,7 @@ function M.load_server(root_dir, server_name)
     return data
 end
 
---- Persist per-server settings to .lvim-ls/servers/<name>.lua.
+--- Persist per-server settings to .lvim/ls/servers/<name>.lua.
 --- Merges `data` into the existing file so that settings from other tabs are preserved.
 ---@param root_dir    string
 ---@param server_name string
@@ -292,7 +284,7 @@ function M.load_ft(root_dir, ft)
     return data
 end
 
---- Persist per-filetype settings to .lvim-ls/filetypes/<ft>.lua.
+--- Persist per-filetype settings to .lvim/ls/filetypes/<ft>.lua.
 ---@param root_dir string
 ---@param ft       string
 ---@param data     table
@@ -316,7 +308,7 @@ end
 -- ── Public: per-EFM-tool overrides ────────────────────────────────────────────
 
 --- Load (and cache) per-EFM-tool project overrides for `root_dir`.
---- Stored under .lvim-ls/efm/<tool>.lua as { enabled = bool, command = string }.
+--- Stored under .lvim/ls/efm/<tool>.lua as { enabled = bool, command = string }.
 ---@param root_dir  string
 ---@param tool_name string
 ---@return table
@@ -330,7 +322,7 @@ function M.load_efm_tool(root_dir, tool_name)
     return data
 end
 
---- Persist per-EFM-tool overrides to .lvim-ls/efm/<tool>.lua.
+--- Persist per-EFM-tool overrides to .lvim/ls/efm/<tool>.lua.
 ---@param root_dir  string
 ---@param tool_name string
 ---@param data      table
@@ -389,7 +381,7 @@ end
 
 -- ── Public: introspection / clearing ──────────────────────────────────────────
 
---- List the project overrides present under `root_dir`/.lvim-ls: which servers, filetypes
+--- List the project overrides present under `root_dir`/.lvim/ls: which servers, filetypes
 --- and EFM tools have an override file, and whether a config file exists. Lets the UI show
 --- and reset per-project overrides without re-reading the files itself.
 ---@param root_dir string
@@ -410,8 +402,7 @@ function M.list_overrides(root_dir)
         return out
     end
     return {
-        has_config = vim.fn.filereadable(config_path(root_dir)) == 1
-            or vim.fn.filereadable(root_dir .. "/" .. LEGACY_FILE) == 1,
+        has_config = vim.fn.filereadable(config_path(root_dir)) == 1,
         servers = names_in(SERVERS_DIR),
         filetypes = names_in(FT_DIR),
         efm_tools = names_in(EFM_DIR),
@@ -422,7 +413,6 @@ end
 ---@param root_dir string
 function M.clear_config(root_dir)
     pcall(vim.fn.delete, config_path(root_dir))
-    pcall(vim.fn.delete, root_dir .. "/" .. LEGACY_FILE)
     M.invalidate(root_dir)
 end
 

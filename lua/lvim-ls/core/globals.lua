@@ -2,7 +2,7 @@
 -- Stores feature flags toggled interactively (auto_format, inlay_hints,
 -- code_lens, diagnostics virtual display) as JSON in stdpath("data").
 -- These take precedence over static user-config defaults, but per-project
--- .lvim-ls/config.lua can still override them at the buffer level.
+-- .lvim/ls/config.lua can still override them at the buffer level.
 --
 -- lvim-ls has no setup() of its own — the driver is lvim-lsp.setup(), which calls
 -- these in order:

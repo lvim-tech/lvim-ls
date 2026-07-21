@@ -112,7 +112,7 @@ table and aggregated into a single `efm-langserver` client — there is no
 external efm.lua. A tool the server needs but Mason has not installed suppresses
 the server start; lvim-installer offers the missing tools via the unified prompt.
 
-Per-project overrides live under `.lvim-ls/` at the project root and are managed
+Per-project overrides live under `.lvim/ls/` at the project root and are managed
 through `lvim-ls.core.project`: >lua
   local project = require("lvim-ls.core.project")
   project.list_overrides(root)          -- { servers, filetypes, efm_tools, has_config }
