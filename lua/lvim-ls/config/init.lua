@@ -106,6 +106,7 @@
 ---@field formatters LvimLspTool[]|nil
 ---@field linters    LvimLspTool[]|nil
 ---@field debuggers  LvimLspTool[]|nil
+---@field tools      LvimLspTool[]|nil  Generic tools the filetype needs that are NOT an LSP / formatter / linter / debugger (compilers, runtimes, build/test helpers). Install-only: offered by the installer, never started as a server or wired to EFM.
 
 ---@class LvimLspMenuConfig
 ---@field title    string|nil

@@ -88,6 +88,7 @@ local function build_bin_aliases(file_types)
         scan(entry.formatters)
         scan(entry.linters)
         scan(entry.debuggers)
+        scan(entry.tools)
     end
     return aliases
 end
@@ -140,6 +141,7 @@ local function validate_file_types(file_types)
             check_tool_list(name, "formatters", entry.formatters)
             check_tool_list(name, "linters", entry.linters)
             check_tool_list(name, "debuggers", entry.debuggers)
+            check_tool_list(name, "tools", entry.tools)
         end
     end
     return problems

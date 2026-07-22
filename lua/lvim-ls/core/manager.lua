@@ -124,6 +124,18 @@ local function efm_executable()
     return (state.config.efm or {}).executable or "efm-langserver"
 end
 
+--- Apply a server config module's `efm` field: a LIST of per-filetype groups
+--- `{ { filetypes = {"go"}, tools = {…} }, { filetypes = {"gomod"}, tools = {…} } }`. Each group
+--- registers its tools for its own filetypes, so a formatter can run on one of a server's filetypes
+--- but not another (gofumpt on `go`, not `gomod`). A one-language server is just a one-group list.
+---@param efm { filetypes: string[], tools: table[] }[]  list of per-filetype groups
+---@return nil
+local function apply_efm(efm)
+    for _, group in ipairs(efm) do
+        M.setup_efm(group.filetypes, group.tools)
+    end
+end
+
 --- Builds the EFM server config from all registered tool configurations.
 --- When `root_dir` is given, per-project overrides (enabled/command) are applied.
 --- This is the canonical EFM config source — no external efm.lua needed.
@@ -265,7 +277,7 @@ end
 --- any already-open buffers of its filetypes. Symmetric with how lvim-lsp.setup injects
 --- file_types/server_config_dirs, but callable AFTER setup and without a re-run.
 ---@param name       string  server module key (also the require suffix <dir_prefix>.<name>)
----@param entry      LvimLspFileTypeEntry  { filetypes, lsp = {}, formatters?, linters?, debuggers? }
+---@param entry      LvimLspFileTypeEntry  { filetypes, lsp = {}, formatters?, linters?, debuggers?, tools? }
 ---@param dir_prefix string  require prefix holding the server-config module
 M.register_language = function(name, entry, dir_prefix)
     -- Merge the entry through the official path so bin_aliases/validation stay coherent.
@@ -377,6 +389,9 @@ M.missing_tools_for_server = function(server_name)
     check_list(ft_entry.formatters)
     check_list(ft_entry.linters)
     check_list(ft_entry.debuggers)
+    -- Generic tools the filetype needs (compilers, runtimes, build/test helpers): install-only,
+    -- reported like the rest so the installer offers them, but never started or wired to EFM.
+    check_list(ft_entry.tools)
     -- EFM is needed when the server registers formatters or linters.
     if #(ft_entry.formatters or {}) > 0 or #(ft_entry.linters or {}) > 0 then
         if efm_missing() then
@@ -427,7 +442,7 @@ M.ensure_lsp_for_buffer = function(server_name, bufnr)
                     local ok, mod = pcall(require, dir .. "." .. server_name)
                     if ok and type(mod) == "table" then
                         if mod.efm then
-                            M.setup_efm(mod.efm.filetypes, mod.efm.tools)
+                            apply_efm(mod.efm)
                         end
                         if mod.dap then
                             dap.setup(mod.dap)
@@ -474,7 +489,7 @@ M.ensure_lsp_for_buffer = function(server_name, bufnr)
     end
 
     if mod.efm then
-        M.setup_efm(mod.efm.filetypes, mod.efm.tools)
+        apply_efm(mod.efm)
     end
     if mod.dap then
         dap.setup(mod.dap)
