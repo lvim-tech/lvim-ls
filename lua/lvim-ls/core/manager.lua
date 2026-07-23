@@ -300,6 +300,29 @@ M.register_language = function(name, entry, dir_prefix)
     end
 end
 
+--- Unregister a language server previously added by `register_language`: stop + detach any running
+--- client, drop its `file_types` entry so it stops auto-attaching, and clear its lifecycle caches. Used
+--- when a provider is REPLACED (e.g. a user swaps a built-in lvim-lang provider for their own) so the
+--- old server does not linger alongside the new one. A no-op for an unknown name.
+---@param name string  the server module_key (as passed to register_language)
+---@return nil
+M.unregister_language = function(name)
+    for _, client in ipairs(vim.lsp.get_clients()) do
+        if client.name == name then
+            for bufnr in pairs(client.attached_buffers or {}) do
+                if vim.api.nvim_buf_is_valid(bufnr) then
+                    M.safe_detach_client(bufnr, client.id)
+                end
+            end
+            pcall(client.stop, client)
+        end
+    end
+    state.file_types[name] = nil -- live ref to config.file_types → no longer offered / auto-attached
+    state.clients_by_root[name] = nil
+    state.start_attempts[name] = nil
+    state.start_failed[name] = nil
+end
+
 -- Mason bin directory; only this is checked for tool presence so that tools
 -- installed outside Mason (system packages, mise, pipx …) do not suppress the
 -- install prompt offered by lvim-installer.
