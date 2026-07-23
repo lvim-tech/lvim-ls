@@ -243,7 +243,7 @@ M.is_lsp_compatible_with_ft = function(server_name, ft)
         end
         return vim.tbl_contains(state.efm_filetypes, ft)
     end
-    local entry = state.file_types[server_name]
+    local entry = state.languages[server_name]
     if not entry then
         return false
     end
@@ -259,7 +259,7 @@ M.get_compatible_lsp_for_ft = function(ft)
         return {}
     end
     local result = {}
-    for server_name, entry in pairs(state.file_types) do
+    for server_name, entry in pairs(state.languages) do
         if vim.tbl_contains(entry.filetypes or {}, ft) then
             table.insert(result, server_name)
         end
@@ -271,19 +271,19 @@ M.get_compatible_lsp_for_ft = function(ft)
 end
 
 --- Runtime-register a language with the engine (the additive seam a plugin shipping its OWN
---- server uses, e.g. lvim-lang): merge its file_types `entry` through the canonical
+--- server uses, e.g. lvim-lang): merge its languages `entry` through the canonical
 --- state.configure path (clean array replace, bin-alias rebuild, validation), append its
 --- server-config `dir_prefix` to the live server_config_dirs array, and attach the server to
 --- any already-open buffers of its filetypes. Symmetric with how lvim-lsp.setup injects
---- file_types/server_config_dirs, but callable AFTER setup and without a re-run.
+--- languages/server_config_dirs, but callable AFTER setup and without a re-run.
 ---@param name       string  server module key (also the require suffix <dir_prefix>.<name>)
----@param entry      LvimLspFileTypeEntry  { filetypes, lsp = {}, formatters?, linters?, debuggers?, tools? }
+---@param entry      LvimLspLanguageEntry  { filetypes, lsp = {}, formatters?, linters?, debuggers?, tools? }
 ---@param dir_prefix string  require prefix holding the server-config module
 M.register_language = function(name, entry, dir_prefix)
     -- Merge the entry through the official path so bin_aliases/validation stay coherent.
     -- configure() merges partial config in place; `patch` is intentionally partial.
     ---@type table
-    local patch = { file_types = { [name] = entry } }
+    local patch = { languages = { [name] = entry } }
     state.configure(patch)
     -- Append the dir prefix to the LIVE array (never through configure — merge REPLACES arrays,
     -- which would drop the dirs lvim-lsp already injected).
@@ -301,7 +301,7 @@ M.register_language = function(name, entry, dir_prefix)
 end
 
 --- Unregister a language server previously added by `register_language`: stop + detach any running
---- client, drop its `file_types` entry so it stops auto-attaching, and clear its lifecycle caches. Used
+--- client, drop its `languages` entry so it stops auto-attaching, and clear its lifecycle caches. Used
 --- when a provider is REPLACED (e.g. a user swaps a built-in lvim-lang provider for their own) so the
 --- old server does not linger alongside the new one. A no-op for an unknown name.
 ---@param name string  the server module_key (as passed to register_language)
@@ -317,7 +317,7 @@ M.unregister_language = function(name)
             pcall(client.stop, client)
         end
     end
-    state.file_types[name] = nil -- live ref to config.file_types → no longer offered / auto-attached
+    state.languages[name] = nil -- live ref to config.languages → no longer offered / auto-attached
     state.clients_by_root[name] = nil
     state.start_attempts[name] = nil
     state.start_failed[name] = nil
@@ -396,7 +396,7 @@ M.missing_tools_for_server = function(server_name)
         end
         return missing
     end
-    local ft_entry = state.file_types[server_name]
+    local ft_entry = state.languages[server_name]
     if not ft_entry then
         return missing
     end
@@ -453,7 +453,7 @@ M.ensure_lsp_for_buffer = function(server_name, bufnr)
         end
     end
 
-    -- ── Early deps check from file_types (no module load needed) ──────────────
+    -- ── Early deps check from languages (no module load needed) ──────────────
     -- If any tool the server needs is missing, do not start it. lvim-installer
     -- offers the missing tools via the unified prompt; meanwhile register the
     -- server's EFM/DAP config so those can still start from already-installed tools.

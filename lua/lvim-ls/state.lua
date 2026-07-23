@@ -12,7 +12,7 @@
 
 ---@class LvimLspState
 ---@field config              LvimLspConfig            Back-compat re-export of the live `lvim-ls.config` table
----@field file_types          table<string, LvimLspFileTypeEntry>  Live ref to config.file_types (module_key → entry)
+---@field languages          table<string, LvimLspLanguageEntry>  Live ref to config.languages (module_key → entry)
 ---@field efm_filetypes       string[]                 Live ref to config.efm.filetypes
 ---@field bin_aliases         table<string, string>
 ---@field clients_by_root     table<string, table<string, integer>>
@@ -37,10 +37,10 @@ local M = {}
 M.config = config
 
 --- Live references into the config that the runtime readers (core.manager, core.bootstrap) access directly as
---- `state.file_types` / `state.efm_filetypes`. Set here and RE-POINTED by configure(): `file_types` is a map
+--- `state.languages` / `state.efm_filetypes`. Set here and RE-POINTED by configure(): `languages` is a map
 --- (merge recurses in place) but `efm.filetypes` is an ARRAY the merge REPLACES, so the ref must be refreshed.
----@type table<string, LvimLspFileTypeEntry>
-M.file_types = config.file_types or {}
+---@type table<string, LvimLspLanguageEntry>
+M.languages = config.languages or {}
 ---@type string[]
 M.efm_filetypes = (config.efm and config.efm.filetypes) or {}
 
@@ -83,14 +83,14 @@ M.not_in_registry = {}
 -- ── Derived caches ────────────────────────────────────────────────────────────
 
 --- Maps Mason package name → installed binary name for tools that differ.
---- Derived from the `bin` fields in the live config's file_types; rebuilt by configure().
+--- Derived from the `bin` fields in the live config's languages; rebuilt by configure().
 ---@type table<string, string>
 M.bin_aliases = {}
 
---- Scan the live config's file_types entries and build the { package = bin } alias map.
----@param file_types table<string, LvimLspFileTypeEntry>
+--- Scan the live config's languages entries and build the { package = bin } alias map.
+---@param languages table<string, LvimLspLanguageEntry>
 ---@return table<string, string>
-local function build_bin_aliases(file_types)
+local function build_bin_aliases(languages)
     local aliases = {}
     local function scan(list)
         for _, tool in ipairs(list or {}) do
@@ -99,7 +99,7 @@ local function build_bin_aliases(file_types)
             end
         end
     end
-    for _, entry in pairs(file_types) do
+    for _, entry in pairs(languages) do
         scan(entry.lsp)
         scan(entry.formatters)
         scan(entry.linters)
@@ -109,17 +109,17 @@ local function build_bin_aliases(file_types)
     return aliases
 end
 
-M.bin_aliases = build_bin_aliases(config.file_types)
+M.bin_aliases = build_bin_aliases(config.languages)
 
---- Validate the shape of `file_types` and collect human-readable problems. Catches the
+--- Validate the shape of `languages` and collect human-readable problems. Catches the
 --- common config mistakes (wrong types) so they surface as a warning instead of silently
 --- no-op'ing when a server is looked up by filetype.
----@param file_types any
+---@param languages any
 ---@return string[]
-local function validate_file_types(file_types)
+local function validate_languages(languages)
     local problems = {}
-    if type(file_types) ~= "table" then
-        return { "file_types must be a table" }
+    if type(languages) ~= "table" then
+        return { "languages must be a table" }
     end
     local function check_tool_list(name, key, list)
         if list == nil then
@@ -137,7 +137,7 @@ local function validate_file_types(file_types)
             end
         end
     end
-    for name, entry in pairs(file_types) do
+    for name, entry in pairs(languages) do
         name = tostring(name)
         if type(entry) ~= "table" then
             problems[#problems + 1] = ("%s: entry must be a table"):format(name)
@@ -176,16 +176,16 @@ function M.configure(user_config)
             config[k] = v
         end
     end
-    M.bin_aliases = build_bin_aliases(config.file_types)
+    M.bin_aliases = build_bin_aliases(config.languages)
     -- Re-point the back-compat runtime refs — `efm.filetypes` is an array the merge may have replaced.
-    M.file_types = config.file_types or {}
+    M.languages = config.languages or {}
     M.efm_filetypes = (config.efm and config.efm.filetypes) or {}
-    -- Surface malformed file_types entries once, at configure time (lazy require avoids a
+    -- Surface malformed languages entries once, at configure time (lazy require avoids a
     -- load-time cycle with the notify util).
-    local problems = validate_file_types(config.file_types)
+    local problems = validate_languages(config.languages)
     if #problems > 0 then
         require("lvim-ls.utils.notify")(
-            ("lvim-ls config: %d file_types issue(s):\n  %s"):format(#problems, table.concat(problems, "\n  ")),
+            ("lvim-ls config: %d languages issue(s):\n  %s"):format(#problems, table.concat(problems, "\n  ")),
             vim.log.levels.WARN
         )
     end

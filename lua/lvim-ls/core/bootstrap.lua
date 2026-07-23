@@ -27,7 +27,7 @@ function M.attach_lsp_to_buffer(bufnr)
     end
 
     local matches = {}
-    for key, entry in pairs(state.file_types) do
+    for key, entry in pairs(state.languages) do
         if vim.tbl_contains(entry.filetypes or {}, ft) then
             table.insert(matches, key)
         end

@@ -48,17 +48,17 @@ function M.check()
 
     -- ── config shape ──────────────────────────────────────────────────────────
     local cfg = state.config or {}
-    local ft_ok = type(cfg.file_types) == "table"
+    local ft_ok = type(cfg.languages) == "table"
     local dirs_ok = type(cfg.server_config_dirs) == "table"
     if ft_ok and dirs_ok then
-        local n_ft = vim.tbl_count(cfg.file_types)
+        local n_ft = vim.tbl_count(cfg.languages)
         local n_dirs = #cfg.server_config_dirs
-        h.ok(("config: %d file_types entr(ies), %d server_config_dir(s)"):format(n_ft, n_dirs))
+        h.ok(("config: %d languages entr(ies), %d server_config_dir(s)"):format(n_ft, n_dirs))
         if n_dirs == 0 then
             h.info("server_config_dirs is empty — server configs are injected by lvim-lsp at setup")
         end
     else
-        h.warn("config: expected file_types:table and server_config_dirs:string[] (injected via lvim-lsp.setup)")
+        h.warn("config: expected languages:table and server_config_dirs:string[] (injected via lvim-lsp.setup)")
     end
 
     -- ── runtime ───────────────────────────────────────────────────────────────

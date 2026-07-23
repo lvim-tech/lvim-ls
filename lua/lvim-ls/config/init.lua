@@ -100,7 +100,7 @@
 
 ---@alias LvimLspTool string | { [1]: string, bin: string }
 
----@class LvimLspFileTypeEntry
+---@class LvimLspLanguageEntry
 ---@field filetypes  string[]
 ---@field lsp        LvimLspTool[]|nil
 ---@field formatters LvimLspTool[]|nil
@@ -149,7 +149,7 @@
 ---@field fold       string|nil
 
 ---@class LvimLspConfig
----@field file_types          table<string, LvimLspFileTypeEntry>  REQUIRED. module_key → entry
+---@field languages          table<string, LvimLspLanguageEntry>  REQUIRED. module_key → entry
 ---@field server_config_dirs  string[]                  Lua require prefixes searched in order for server configs
 ---@field efm                 LvimLspEfmConfig
 ---@field info                LvimLspInfoConfig

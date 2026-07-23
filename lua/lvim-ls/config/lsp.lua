@@ -1,10 +1,10 @@
 -- lvim-ls: LSP core defaults.
--- file_types, server_config_dirs, EFM, lifecycle callbacks and timing.
+-- languages, server_config_dirs, EFM, lifecycle callbacks and timing.
 --
 ---@module "lvim-ls.config.lsp"
 
 return {
-    file_types = {},
+    languages = {},
     server_config_dirs = {},
     commands = {},
 
