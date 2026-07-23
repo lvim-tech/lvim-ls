@@ -17,5 +17,6 @@ return {
     on_dir_change = nil,
     startup_delay_ms = 100,
     dir_change_delay_ms = 5000,
+    start_debounce_ms = 4000,
     dap_local_fn = nil,
 }

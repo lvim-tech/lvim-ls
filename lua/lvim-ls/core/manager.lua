@@ -547,6 +547,40 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
         end
     end
 
+    -- Latched startup failure: this server already crashed BEFORE it initialized for this root
+    -- (see the on_exit hook below). Stop auto-retrying it — otherwise every later attach trigger
+    -- (each BufEnter back to the buffer, once the debounce window passes) re-spawns the doomed
+    -- process and its "quit with exit code" error piles up in :messages. Cleared by an explicit
+    -- restart, a tool reinstall, or a new session — the paths where the cause may have changed.
+    local failed = state.start_failed[server_name]
+    if failed and failed[root_dir] then
+        debug(
+            string.format("[%s] auto-start latched off (crashed on startup at %s)", server_name, root_dir),
+            vim.log.levels.DEBUG
+        )
+        return nil
+    end
+
+    -- No live client for this (server, root). The attach triggers (FileType, BufEnter/BufReadPost,
+    -- the startup sweep) can each land here within a few hundred ms; and a server that CRASHES on
+    -- startup leaves no client behind, so without a guard every trigger spawns another doomed process
+    -- and its error is reported once per spawn. Debounce: skip a re-spawn within start_debounce_ms of
+    -- the last attempt for this exact (server, root). A healthy server is recorded in clients_by_root
+    -- the instant vim.lsp.start returns, so later triggers take the reuse branch above and never reach
+    -- here; only the no-client case is collapsed. (The latch above is the long-term guard; this is the
+    -- sub-second one that covers the burst before the first crash is even detected.)
+    local now = vim.uv.now()
+    local attempts = state.start_attempts[server_name]
+    if attempts and attempts[root_dir] and (now - attempts[root_dir]) < (state.config.start_debounce_ms or 4000) then
+        debug(
+            string.format("[%s] spawn debounced (root=%s, no live client)", server_name, root_dir),
+            vim.log.levels.DEBUG
+        )
+        return nil
+    end
+    state.start_attempts[server_name] = attempts or {}
+    state.start_attempts[server_name][root_dir] = now
+
     local lsp_config = lsp.config
     local config = (type(lsp_config) == "function") and lsp_config() or vim.deepcopy(lsp_config)
     if not config then
@@ -584,6 +618,39 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
     config.on_attach = function(client, attached_bufnr)
         if attached_bufnr == bufnr then
             run_attach_hooks(client, attached_bufnr, server_on_attach)
+        end
+    end
+
+    -- Track startup outcome to drive the failure latch, composing the server's own hooks. A server
+    -- that reaches on_init is healthy → clear any latch/attempt marker. A client that EXITS with a
+    -- non-zero code WITHOUT ever initializing crashed on startup → latch it off so it is not
+    -- auto-respawned on the next trigger (and drop its stale id from clients_by_root).
+    local initialized = false
+    local server_on_init = type(config.on_init) == "function" and config.on_init or nil
+    config.on_init = function(client, init_result)
+        initialized = true
+        if state.start_failed[server_name] then
+            state.start_failed[server_name][root_dir] = nil
+        end
+        if state.start_attempts[server_name] then
+            state.start_attempts[server_name][root_dir] = nil
+        end
+        if server_on_init then
+            server_on_init(client, init_result)
+        end
+    end
+    local server_on_exit = type(config.on_exit) == "function" and config.on_exit or nil
+    config.on_exit = function(code, signal, client_id)
+        if not initialized and code ~= 0 then
+            state.start_failed[server_name] = state.start_failed[server_name] or {}
+            state.start_failed[server_name][root_dir] = true
+        end
+        local roots = state.clients_by_root[server_name]
+        if roots and roots[root_dir] == client_id then
+            roots[root_dir] = nil
+        end
+        if server_on_exit then
+            server_on_exit(code, signal, client_id)
         end
     end
     local new_client_id = vim.lsp.start(config, { bufnr = bufnr })
@@ -795,8 +862,12 @@ M.restart_server = function(server_name)
             pcall(client.stop, client)
         end
     end
-    -- Drop the cached per-root client ids so ensure_* starts fresh ones.
+    -- Drop the cached per-root client ids so ensure_* starts fresh ones, and the spawn-debounce +
+    -- startup-failure latches so this EXPLICIT restart is never suppressed (even right after a crash —
+    -- the user may have just fixed the cause, e.g. installed a newer JVM for jdtls).
     state.clients_by_root[server_name] = nil
+    state.start_attempts[server_name] = nil
+    state.start_failed[server_name] = nil
     vim.defer_fn(function()
         local any = false
         for bufnr in pairs(bufs) do
@@ -940,6 +1011,11 @@ M.set_installation_status = function(status)
     state.installation_in_progress = status
 
     if status == false and previous == true then
+        -- An install just changed the toolchain, so clear the startup-failure + debounce latches:
+        -- a server that crashed for a missing/old tool deserves a fresh attempt now that packages
+        -- landed (otherwise the latch below would skip the very re-ensure this block performs).
+        state.start_failed = {}
+        state.start_attempts = {}
         -- Re-run ensure_lsp_for_buffer for every open buffer.
         -- The dep check inside will correctly start servers whose tools are now
         -- installed, without guessing binary names from server identifiers.

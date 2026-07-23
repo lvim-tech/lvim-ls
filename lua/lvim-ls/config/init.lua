@@ -169,6 +169,7 @@
 ---@field on_dir_change       fun()|nil                 Called on DirChanged after stop_servers (e.g. fidget clear)
 ---@field startup_delay_ms    integer                   Defer ms before autocmds fire (default: 100)
 ---@field dir_change_delay_ms integer                   Defer ms before project-cleanup runs (default: 5000)
+---@field start_debounce_ms   integer                   Min ms between spawn attempts of the same (server, root) with no live client — collapses the FileType/BufEnter/sweep trigger burst into one spawn and stops a fast-crashing server being relaunched repeatedly (default: 4000)
 ---@field notify              LvimLspNotifyConfig
 ---@field debug               LvimLspDebugConfig
 ---@field dap_local_fn        fun()|nil                 When set, adds :LvimLsp dap subcommand

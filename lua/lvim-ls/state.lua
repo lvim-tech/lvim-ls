@@ -16,6 +16,8 @@
 ---@field efm_filetypes       string[]                 Live ref to config.efm.filetypes
 ---@field bin_aliases         table<string, string>
 ---@field clients_by_root     table<string, table<string, integer>>
+---@field start_attempts      table<string, table<string, integer>>  server → root → uv.now() of last spawn attempt (spawn debounce)
+---@field start_failed        table<string, table<string, boolean>>  server → root → true when the server crashed on startup (auto-retry latched off)
 ---@field disabled_servers    table<string, boolean>
 ---@field disabled_for_buffer table<integer, table<string, boolean>>
 ---@field efm_configs         table<string, table[]>
@@ -46,6 +48,20 @@ M.efm_filetypes = (config.efm and config.efm.filetypes) or {}
 
 --- Maps server_name → root_dir → client_id; one client reused per project root
 M.clients_by_root = {}
+
+--- Maps server_name → root_dir → uv.now() of the last spawn ATTEMPT. Used to debounce the
+--- FileType / BufEnter / BufReadPost / startup-sweep triggers so a server with no live client
+--- (still spawning, or one that crashed on startup) is not launched again within
+--- config.start_debounce_ms — otherwise a fast-crashing server reports its error once per trigger.
+---@type table<string, table<string, integer>>
+M.start_attempts = {}
+
+--- Maps server_name → root_dir → true once a spawned client EXITED abnormally BEFORE it initialized
+--- (crashed on startup, e.g. jdtls on a too-old JVM). While latched, the auto-attach triggers stop
+--- re-spawning that (server, root) — so a broken server reports its error ONCE, not on every BufEnter.
+--- Cleared on a successful `on_init`, an explicit restart, or a tool reinstall (and reset each session).
+---@type table<string, table<string, boolean>>
+M.start_failed = {}
 
 --- Server names disabled globally (across all buffers)
 M.disabled_servers = {}
