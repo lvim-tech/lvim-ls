@@ -604,9 +604,17 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
     state.start_attempts[server_name] = attempts or {}
     state.start_attempts[server_name][root_dir] = now
 
+    -- NOT the `A and B or C` idiom: when `lsp_config` is a function that returns nil/false, that idiom
+    -- falls through to `vim.deepcopy(lsp_config)` and copies the FUNCTION itself, so `config` becomes a
+    -- function and the `config.root_dir` below crashes with "index a function value". Resolve explicitly.
     local lsp_config = lsp.config
-    local config = (type(lsp_config) == "function") and lsp_config() or vim.deepcopy(lsp_config)
-    if not config then
+    local config
+    if type(lsp_config) == "function" then
+        config = lsp_config()
+    else
+        config = vim.deepcopy(lsp_config)
+    end
+    if type(config) ~= "table" then
         return nil
     end
     config.root_dir = root_dir
