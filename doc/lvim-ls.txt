@@ -56,13 +56,6 @@ lvim-installer (recommended) — install / update / pin it from the Plugins tab 
 the LVIM package manager, which installs through Neovim's built-in vim.pack: >vim
   :LvimInstaller plugins
 <
-Standalone (lazy.nvim): >lua
-  {
-      "lvim-tech/lvim-ls",
-      dependencies = { "lvim-tech/lvim-pkg" },
-      -- no config(): a library, configured through lvim-lsp
-  }
-<
 ==============================================================================
 4. USAGE                                                     *lvim-ls-usage*
 

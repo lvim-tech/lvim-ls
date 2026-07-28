@@ -59,26 +59,6 @@ lvim-installer installs plugins through Neovim's built-in `vim.pack`, so no exte
 plugin manager is needed. `lvim-ls` is pulled in automatically as a dependency of
 `lvim-lsp`.
 
-### lazy.nvim
-
-```lua
-return {
-    "lvim-tech/lvim-ls",
-    dependencies = { "lvim-tech/lvim-pkg" },
-    -- no config(): a library, configured through lvim-lsp
-}
-```
-
-### packer.nvim
-
-```lua
-use({
-    "lvim-tech/lvim-ls",
-    requires = { "lvim-tech/lvim-pkg" },
-    -- no config: a library, configured through lvim-lsp
-})
-```
-
 ### Native (vim.pack)
 
 ```lua
