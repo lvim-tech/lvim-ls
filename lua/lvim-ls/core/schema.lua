@@ -159,8 +159,18 @@ function M.resolve(server_name, root_dir, bufnr)
     local mod = load_mod(server_name)
     local client = live_client(server_name, bufnr)
 
-    -- Build merged settings: module defaults ← live client ← project overrides
-    local base = mod and mod.lsp and mod.lsp.config and mod.lsp.config.settings or {}
+    -- Build merged settings: module defaults ← live client ← project overrides.
+    -- A server's `config` may be a FUNCTION — the documented root gate ("config() returns nil ⇒ do
+    -- not start", which every lvim-lang companion uses) — so it is resolved before being indexed,
+    -- exactly as `core.manager` does when it starts a client. The `A and B or C` idiom is what
+    -- crashed here ("attempt to index field 'config' (a function value)"): the same trap manager's
+    -- own comment warns about, sprung the moment a form was opened for such a server.
+    local declared = mod and mod.lsp and mod.lsp.config or nil
+    if type(declared) == "function" then
+        local ok, resolved = pcall(declared)
+        declared = ok and resolved or nil
+    end
+    local base = type(declared) == "table" and declared.settings or {}
     local live = client and client.config and client.config.settings or {}
     local override_raw = project.load_server(root_dir, server_name)
     local override = override_raw.settings or {}

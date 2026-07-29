@@ -127,6 +127,15 @@ end
 local function write_file(path, data)
     local content = "return " .. serialize(data) .. "\n"
     local ok = pcall(vim.fn.writefile, vim.split(content, "\n"), path)
+    if ok then
+        -- TRUST WHAT WE JUST WROTE. Reading these files goes through `vim.secure.read`, which is
+        -- right for a file that arrived with someone else's repository — but this one did not: its
+        -- content was generated HERE, from the settings the user just chose in the panel. Without
+        -- this, saving from the UI immediately made the same UI report the file as untrusted code
+        -- and asked the user to `:trust` their own click. `vim.secure.trust` records the new hash,
+        -- so a LATER edit by anything other than this writer still prompts, exactly as it should.
+        pcall(vim.secure.trust, { action = "allow", path = path })
+    end
     return ok
 end
 
