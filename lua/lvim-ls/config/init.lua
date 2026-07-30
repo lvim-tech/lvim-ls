@@ -58,7 +58,7 @@
 ---@field underline       boolean|nil
 ---@field severity_sort   boolean|nil
 ---@field update_in_insert boolean|nil
----@field signs           LvimLspDiagnosticSignsConfig|nil
+---@field signs           LvimLspDiagnosticSignsConfig|false  gutter glyphs; `false` leaves the editor's alone
 
 ---@class LvimLspFeaturesConfig
 ---@field document_highlight boolean

@@ -39,6 +39,16 @@ return {
         underline = nil,
         severity_sort = nil,
         update_in_insert = nil,
-        signs = nil,
+        -- THE GUTTER GLYPHS, this plugin's own. They used to arrive from the host config, which
+        -- meant a distribution had to carry an icon table for something the diagnostics layer draws
+        -- itself — and a host that passed nothing got Neovim's letters (E/W/I/H) instead. Nerd Font
+        -- glyphs, since the set requires one; override any of the four, or set `signs = false` to
+        -- leave `vim.diagnostic.config().signs` untouched entirely.
+        signs = {
+            error = "",
+            warn = "",
+            hint = "󰌵",
+            info = "",
+        },
     },
 }

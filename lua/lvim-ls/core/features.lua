@@ -36,7 +36,7 @@ function M.setup_diagnostics()
         end
     end
 
-    if cfg.signs then
+    if cfg.signs and cfg.signs ~= false then
         local text = {}
         local sev = vim.diagnostic.severity
         if cfg.signs.error then
