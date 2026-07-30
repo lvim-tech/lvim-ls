@@ -362,7 +362,20 @@ function M.apply_buffer_features(client, bufnr)
                 if root then
                     effective = project.get_feature(root, "auto_format", feat.auto_format)
                 end
-                if eval_flag(effective) then
+                -- Ask whether anything CAN format this buffer before asking it to. `vim.lsp.buf.format`
+                -- filters to formatting-capable clients, but when that leaves none it REPORTS it —
+                -- "[LSP] Format request failed, no matching language servers." — so a buffer whose
+                -- attached server simply has no formatting support printed an error on EVERY save
+                -- (measured: a `.json` file with json-lsp attached, `supports_method("textDocument/
+                -- formatting") == false`, 0 capable clients). Nothing to do is not a failure.
+                if
+                    eval_flag(effective)
+                    and #vim.lsp.get_clients({
+                            bufnr = bufnr,
+                            method = "textDocument/formatting",
+                        })
+                        > 0
+                then
                     vim.lsp.buf.format({ bufnr = bufnr })
                 end
             end,
