@@ -671,17 +671,17 @@ M._start_server_for_buffer = function(server_name, bufnr, mod)
         end
     end
     local server_on_exit = type(config.on_exit) == "function" and config.on_exit or nil
-    config.on_exit = function(code, signal, client_id)
+    config.on_exit = function(code, signal, exited_id)
         if not initialized and code ~= 0 then
             state.start_failed[server_name] = state.start_failed[server_name] or {}
             state.start_failed[server_name][root_dir] = true
         end
         local roots = state.clients_by_root[server_name]
-        if roots and roots[root_dir] == client_id then
+        if roots and roots[root_dir] == exited_id then
             roots[root_dir] = nil
         end
         if server_on_exit then
-            server_on_exit(code, signal, client_id)
+            server_on_exit(code, signal, exited_id)
         end
     end
     local new_client_id = vim.lsp.start(config, { bufnr = bufnr })

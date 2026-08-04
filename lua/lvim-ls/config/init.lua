@@ -68,6 +68,10 @@
 ---@class LvimLspCodeLensConfig
 ---@field enabled boolean
 
+---@class LvimLspSemanticTokensConfig
+---@field enabled  boolean  false → `vim.lsp.semantic_tokens.enable(false)`; the feature is left off
+---@field debounce integer  ms the core waits after a change before asking for tokens (0 arms no timer)
+
 ---@class LvimLspFormConfig
 ---@field after_apply string  "Stay" | "Close"
 
@@ -159,6 +163,7 @@
 ---@field diagnostics         LvimLspDiagnosticsConfig
 ---@field features            LvimLspFeaturesConfig
 ---@field code_lens           LvimLspCodeLensConfig
+---@field semantic_tokens     LvimLspSemanticTokensConfig
 ---@field form                LvimLspFormConfig
 ---@field popup_global        table
 ---@field progress            LvimLspProgressConfig
