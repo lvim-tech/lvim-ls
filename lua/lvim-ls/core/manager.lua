@@ -23,6 +23,26 @@ local M = {}
 --- Returns the first ancestor directory that contains a marker, or nil.
 ---@param ... string  Marker file/directory names (e.g. ".git", "package.json")
 ---@return fun(startpath: string): string|nil
+--- Does `dir` carry `marker`? A marker is an exact entry name (".git", "Cargo.toml"), a GLOB
+--- ("*.sln", "*.csproj" — any entry matching it), or a FUNCTION `fun(dir): boolean`. Before the
+--- glob/function forms, a server declaring ".sln" was stat'ing a file literally named ".sln" and
+--- never matched, so its root silently fell back to .git / the cwd.
+---@param dir string
+---@param marker string|fun(dir: string): boolean
+---@return boolean
+local function marker_in(dir, marker)
+    if type(marker) == "function" then
+        return marker(dir) == true
+    end
+    if type(marker) ~= "string" then
+        return false
+    end
+    if marker:find("[%*%?%[]") then
+        return #vim.fn.glob(dir .. "/" .. marker, true, true) > 0
+    end
+    return uv.fs_stat(dir .. "/" .. marker) ~= nil
+end
+
 local function root_pattern(...)
     local markers = { ... }
     return function(startpath)
@@ -36,7 +56,7 @@ local function root_pattern(...)
         end
         while path and #path > 0 do
             for _, marker in ipairs(markers) do
-                if uv.fs_stat(path .. "/" .. marker) then
+                if marker_in(path, marker) then
                     return path
                 end
             end
@@ -530,6 +550,9 @@ end
 ---@param bufnr       integer
 ---@param mod         table  Already-loaded server config module
 ---@return integer|nil
+--- The root finder for a marker list (exact names, globs, functions) — the seam tests use.
+M._root_pattern = root_pattern
+
 M._start_server_for_buffer = function(server_name, bufnr, mod)
     if not is_real_file_buffer(bufnr) then
         return nil
